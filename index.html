@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów · samoloty na żywo</title>
+  <title>Radar Zaborów 3.0 · samoloty na żywo</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -18,12 +18,9 @@
     .pill.bad{color:#ffaaa6;border-color:#895352}
     .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#122238;border:1px solid #2e4764;border-radius:16px;padding:12px 15px;margin-bottom:16px}
     .controls .name{color:#bbd4eb;font-size:14px;font-weight:600}
-    .segmented{display:inline-flex;gap:4px;padding:3px;border:1px solid #395575;border-radius:11px;background:#0c192b}
     button{cursor:pointer;background:#276f9f;border:1px solid transparent;color:white;font:inherit;padding:9px 14px;border-radius:10px;min-height:41px}
     button:hover{background:#3784bb}
     button:focus-visible{outline:3px solid #97dbff;outline-offset:2px}
-    .segmented button{min-width:67px;background:transparent;color:#bcd1e6}
-    .segmented button[aria-pressed="true"]{background:#2f82ba;color:white;font-weight:700}
     #alertToggle{background:#1b344b;border-color:#47617c}
     #alertToggle[aria-pressed="true"]{background:#234c3c;border-color:#4ca980}
     .controls .hint{font-size:12px;color:#9cb2cc}
@@ -57,27 +54,57 @@
     .foot{color:#8da8c4;font-size:12px;line-height:1.65;margin-top:18px}
     .foot a{color:#89d5ff}
     @media (max-width:950px){body{padding:12px}.layout{grid-template-columns:1fr}.panel{padding:15px}.radar{max-width:430px}}
-    @media (max-width:480px){.controls{gap:8px}.fields{gap:11px}.segmented button{min-width:58px;padding:7px 9px}.panel{padding:12px}.flight{padding:12px}}
+    @media (max-width:480px){.controls{gap:8px}.fields{gap:11px}.panel{padding:12px}.flight{padding:12px}.flightMain{grid-template-columns:1fr}.aircraftPhoto{max-width:220px}.flightTop{align-items:flex-start}}
+
+    .radiusForm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .radiusForm label{font-size:14px;color:#bbd4eb;font-weight:650}
+    .radiusInput{width:100px;min-height:41px;padding:9px 10px;background:#091828;border:1px solid #5b7da0;border-radius:10px;color:#fff;font:inherit;font-size:16px}
+    .radiusInput:focus{outline:2px solid #79caff;outline-offset:2px}
+    .error{font-size:12px;color:#ffb4a8}
+    .speed{color:#a8bdd2;font-size:12px}
+    .speed.fast{color:#6de7ac;font-weight:700}
+    .flightIdentity{display:flex;align-items:center;gap:11px;min-width:0}
+    .flightIdentity strong{display:block;overflow-wrap:anywhere}
+    .company{color:#bcd2e8;font-size:13px;margin-top:2px}
+    .logoWrap,.logoPlaceholder{width:78px;height:45px;flex:0 0 78px;display:grid;place-items:center;border:1px solid #395875;background:#f6f8fb;border-radius:9px;overflow:hidden}
+    .logoWrap img{display:block;width:76px;height:43px;object-fit:contain}
+    .logoPlaceholder{background:#1c3b55;border-color:#315b7e;font-size:22px;color:#7fcbff}
+    .logoPlaceholder[hidden]{display:none}
+    .logoWrap .logoPlaceholder{width:78px;height:45px;border:0;flex:none}
+    .flightMain{display:grid;grid-template-columns:160px minmax(0,1fr);gap:14px;align-items:start}
+    .aircraftPhoto{margin:0}
+    .aircraftPhoto>a{display:block;width:160px;height:108px;border-radius:9px;border:1px solid #375471;overflow:hidden;background:#0a1a29}
+    .aircraftPhoto img{display:block;width:100%;height:100%;object-fit:contain}
+    .aircraftPhoto figcaption{font-size:10px;line-height:1.3;color:#b4c7d9;margin-top:5px;max-width:160px}
+    .aircraftPhoto figcaption a,.foot a{color:#95d3f6}
+    .photoArea .photoFallback{display:none}
+    .photoArea.failed .aircraftPhoto{display:none}
+    .photoArea.failed .photoFallback{display:flex}
+    .photoPlaceholder{width:160px;height:108px;border:1px dashed #466887;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#a5bfd7;font-size:11px}
+    .photoPlaceholder span{font-size:28px;color:#6cb5ee}
+    @media (max-width:1100px){.flightMain{grid-template-columns:1fr}.aircraftPhoto>a,.photoPlaceholder{width:160px}}
+    @media (max-width:950px){.flightMain{grid-template-columns:160px minmax(0,1fr)}}
+    @media (max-width:550px){.flightMain{grid-template-columns:1fr}.flightTop{flex-wrap:wrap}}
   </style>
 </head>
 <body>
   <header class="header">
     <div>
       <h1>✈ Radar Zaborów</h1>
-      <p class="sub">Samoloty wokół Zaborowa · powiat warszawski zachodni</p>
+      <p class="sub">Samoloty wokół Zaborowa · 52°15′46,6″ N, 20°41′09,9″ E</p>
     </div>
     <div class="pill" id="status" role="status">Łączenie z radarem…</div>
   </header>
 
   <nav class="controls" aria-label="Ustawienia radaru">
-    <span class="name">Zasięg</span>
-    <div class="segmented" role="group" aria-label="Promień radaru">
-      <button type="button" data-radius="10" aria-pressed="true">10 km</button>
-      <button type="button" data-radius="20" aria-pressed="false">20 km</button>
-      <button type="button" data-radius="50" aria-pressed="false">50 km</button>
-    </div>
-    <button type="button" id="alertToggle" aria-pressed="false">🔔 Włącz alarm 10 km</button>
-    <span class="hint">Alert przy nowym samolocie w strefie 10 km</span>
+    <form class="radiusForm" id="radiusForm">
+      <label for="radiusInput">Promień (km)</label>
+      <input class="radiusInput" id="radiusInput" type="text" inputmode="decimal" autocomplete="off" value="10" aria-describedby="radiusError" maxlength="6">
+      <button type="submit">Ustaw</button>
+      <span id="radiusError" class="error" role="alert"></span>
+    </form>
+    <button type="button" id="alertToggle" aria-pressed="false">🔕 Włącz alarm 10 km</button>
+    <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
   </nav>
 
   <div id="notice" class="notice" role="alert"></div>
@@ -111,30 +138,33 @@
   </main>
 
   <footer class="foot">
-    Odświeżanie co 30 sekund przy otwartej stronie. Alarm 10 km działa podczas jej aktywnej pracy;
+    Odświeżanie co 30 s bez samolotów i co 10 s po ich wykryciu. Alarm 10 km działa podczas aktywnej pracy strony;
     na tablecie nie gwarantuje działania przy wygaszonym ekranie lub w tle.
     Dane pozycyjne: <a href="https://adsb.one" target="_blank" rel="noreferrer">ADSB One</a>,
     <a href="https://adsb.lol" target="_blank" rel="noreferrer">ADSB.lol</a>,
     <a href="https://adsb.fi" target="_blank" rel="noreferrer">ADSB.fi</a>.
     Identyfikacja i trasy: <a href="https://adsbdb.com" target="_blank" rel="noreferrer">ADSBdb</a>,
     <a href="https://hexdb.io" target="_blank" rel="noreferrer">hexdb.io</a>.
-    Trasy są orientacyjne; powiadomienie może nie zadziałać, gdy samolot nie nadaje lub sygnał nie jest dostępny.
+    Zdjęcia (jeśli dostępne): <a href="https://www.planespotters.net/" target="_blank" rel="noopener noreferrer">Planespotters.net</a> (autor pod każdym zdjęciem). Logotypy: <a href="https://www.aviasales.com/" target="_blank" rel="noopener noreferrer">Aviasales</a>. Trasy są orientacyjne; powiadomienia zależą od aktywności tabletu i dostępności sygnału.
   </footer>
 
 <script>
 'use strict';
-const LAT = 52.2634;
-const LON = 20.6845;
+const LAT = 52.2629444444;
+const LON = 20.6860833333;
 const DEGREES = Math.PI / 180;
-const REFRESH_MS = 30000;
+const QUIET_REFRESH_MS = 30000;
+const BUSY_REFRESH_MS = 10000;
 const el = id => document.getElementById(id);
 const safe = value => String(value ?? 'Brak danych').replace(/[&<>"']/g,
   ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const validRadius = number => Number.isFinite(number) && number >= 1 && number <= 200;
 
 let radius = 10;
 let last = [];
 let updateNumber = 0;
 let controller = null;
+let nextTimer = null;
 let alertEnabled = false;
 let baselineReady = false;
 let previousNear = new Set();
@@ -142,35 +172,63 @@ const recentlyAlerted = new Map();
 let audioContext = null;
 let noticeTimer = null;
 
+try {
+  const stored = Number(localStorage.getItem('radar-zaborow-radius'));
+  if (validRadius(stored)) radius = stored;
+} catch { /* Pamięć ustawień nie jest wymagana. */ }
+el('radiusInput').value = String(radius);
+
 function planeKey(f) {
   return String(f.hex || f.flight || f.registration || '').trim().toUpperCase();
 }
 function field(label, value) {
-  return `<div><span class="label">${label}</span><div class="value">${safe(value)}</div></div>`;
+  return `<div><span class="label">${safe(label)}</span><div class="value">${safe(value)}</div></div>`;
 }
 function routeAirport(a) {
   return a ? [a.code, a.name].filter(Boolean).join(' · ') || null : null;
 }
+function photoHTML(f) {
+  const photo = f.photo;
+  if (photo?.thumbnail && photo?.link && photo?.photographer) {
+    return `<div class="photoArea"><figure class="aircraftPhoto"><a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}" title="Otwórz zdjęcie na Planespotters.net">
+      <img src="${safe(photo.thumbnail)}" alt="Samolot ${safe(f.registration || f.model || f.flight || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.photoArea').classList.add('failed')"></a>
+      <figcaption>© ${safe(photo.photographer)} · <a href="${safe(photo.link)}" target="_blank" rel="noopener noreferrer">Planespotters.net</a></figcaption></figure><div class="photoPlaceholder photoFallback"><span>✈</span>Brak zdjęcia</div></div>`;
+  }
+  return `<div class="photoPlaceholder" aria-label="Zdjęcie samolotu niedostępne"><span>✈</span>Brak zdjęcia</div>`;
+}
+function logoHTML(f) {
+  const iata = typeof f.airline_iata === 'string' && /^[A-Z0-9]{2}$/.test(f.airline_iata) ? f.airline_iata : null;
+  if (!iata) return '<span class="logoPlaceholder" title="Brak logo">✈</span>';
+  return `<span class="logoWrap"><img src="https://pics.avs.io/100/45/${iata}.png" alt="Logo ${safe(f.operator || iata)}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="logoPlaceholder" hidden>✈</span></span>`;
+}
 function render(data) {
   last = Array.isArray(data.flights) ? data.flights : [];
-  const near = last.filter(f => Number(f.km) <= 10);
   el('count').textContent = `${last.length} samolotów`;
-  el('nearCount').textContent = String(near.length);
+  el('nearCount').textContent = String(data.inside_10km ?? last.filter(f => Number(f.km) <= 10).length);
   el('allCount').textContent = String(last.length);
-  el('time').textContent = 'Stan: ' + new Date(data.updated).toLocaleTimeString('pl-PL');
-  el('radiusInfo').textContent = `Promień: ${radius} km (poziomo)`;
-  el('rangeLabel').textContent = `${radius} km`;
-  el('zone10').setAttribute('r', String(178 * 10 / radius));
-  el('ringHalf').setAttribute('r', String(radius === 10 ? 89 : 178 * 10 / radius));
+  const dt = new Date(data.updated);
+  el('time').textContent = 'Stan: ' + (Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pl-PL') : '—');
+  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
+  el('rangeLabel').textContent = `${radius.toLocaleString('pl-PL')} km`;
+  el('zone10').setAttribute('r', String(178 * Math.min(1,10/radius)));
+  el('ringHalf').setAttribute('r', '89');
+  el('refreshInfo').textContent = last.length ? 'Co 10 s · wykryto samolot' : 'Co 30 s · brak samolotów';
+  el('refreshInfo').className = last.length ? 'speed fast' : 'speed';
+
   el('flights').innerHTML = last.length ? last.map(f => {
-    const close = Number(f.km) <= 10;
-    return `<article class="flight"><div class="flightTop"><strong>✈ ${safe(f.flight || f.registration || f.hex || 'Samolot')}</strong>
-      <span class="dist ${close ? 'near' : ''}">${safe(f.km)} km${close ? ' · strefa 10 km' : ''}</span></div>
-      <div class="fields">${field('Samolot',f.model || f.registration || 'Nieznany')}
-      ${field('Linia / operator',f.operator)}${field('Skąd',routeAirport(f.from))}
-      ${field('Dokąd',routeAirport(f.to))}${field('Wysokość',f.altitude_m == null ? null : f.altitude_m + ' m')}
-      ${field('Prędkość',f.speed_kmh == null ? null : f.speed_kmh + ' km/h')}</div></article>`;
-  }).join('') : `<div class="empty">Brak wykrytych samolotów w promieniu ${radius} km.</div>`;
+    const near = Number(f.km) <= 10;
+    return `<article class="flight">
+      <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
+        <strong>${safe(f.flight || f.registration || f.hex || 'Samolot')}</strong>
+        <div class="company">${safe(f.operator || 'Nieznana linia / operator')}</div></div></div>
+        <span class="dist ${near ? 'near' : ''}">${safe(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
+      <div class="flightMain"><div>${photoHTML(f)}</div><div class="fields">
+        ${field('Samolot', f.model)}${field('Rejestracja',f.registration)}
+        ${field('Skąd',routeAirport(f.from))}${field('Dokąd',routeAirport(f.to))}
+        ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m')}
+        ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h')}
+      </div></div></article>`;
+  }).join('') : `<div class="empty">Brak wykrytych samolotów w promieniu ${radius.toLocaleString('pl-PL')} km.<p>Radar spróbuje ponownie za 30 sekund.</p></div>`;
 
   let dots = '';
   for (const f of last) {
@@ -180,47 +238,42 @@ function render(data) {
     const x = 200 + dx / radius * 178;
     const y = 200 - dy / radius * 178;
     if (Math.hypot(x - 200, y - 200) > 178) continue;
-    const close = Number(f.km) <= 10;
-    dots += `<g><circle class="dot ${close ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
+    const near = Number(f.km) <= 10;
+    dots += `<g><circle class="dot ${near ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
       <text class="planeLabel" x="${(x + 8).toFixed(1)}" y="${(y - 7).toFixed(1)}">${safe(f.flight || f.registration || '✈')}</text></g>`;
   }
   el('dots').innerHTML = dots;
 }
-
 function showNotice(message) {
   clearTimeout(noticeTimer);
   el('notice').textContent = message;
   el('notice').classList.add('show');
   noticeTimer = setTimeout(() => el('notice').classList.remove('show'), 14000);
 }
-
 function beep() {
   if (!audioContext) return;
   try {
     if (audioContext.state === 'suspended') audioContext.resume();
     const osc = audioContext.createOscillator();
     const gain = audioContext.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 770;
+    osc.type = 'sine'; osc.frequency.value = 770;
     gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.07, audioContext.currentTime + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.24);
     osc.connect(gain); gain.connect(audioContext.destination);
     osc.start(); osc.stop(audioContext.currentTime + 0.25);
-  } catch { /* Dźwięk może być blokowany przez system tabletu. */ }
+  } catch { /* Dźwięk może być zablokowany. */ }
 }
-
 function checkEntrants(flights) {
-  const current = new Set();
-  const fresh = [];
+  const current = new Set(), fresh = [];
   const now = Date.now();
   for (const f of flights) {
-    if (Number(f.km) > 10) continue;
+    if (!Number.isFinite(Number(f.km)) || Number(f.km) > 10) continue;
     const key = planeKey(f);
     if (!key) continue;
     current.add(key);
     if (alertEnabled && baselineReady && !previousNear.has(key) &&
-      (!recentlyAlerted.has(key) || now - recentlyAlerted.get(key) > 15 * 60000)) {
+      (!recentlyAlerted.has(key) || now - recentlyAlerted.get(key) > 15*60000)) {
       fresh.push(f);
       recentlyAlerted.set(key, now);
     }
@@ -228,55 +281,72 @@ function checkEntrants(flights) {
   previousNear = current;
   baselineReady = true;
   for (const [key, time] of recentlyAlerted) {
-    if (now - time > 60 * 60000) recentlyAlerted.delete(key);
+    if (now-time > 60*60000) recentlyAlerted.delete(key);
   }
   if (!alertEnabled || !fresh.length) return;
-  const names = fresh.slice(0, 3).map(f => f.flight || f.registration || f.hex || 'samolot');
+  const names = fresh.slice(0,3).map(f => f.flight || f.registration || f.hex || 'samolot');
   const message = `✈ W strefie 10 km: ${names.join(', ')}${fresh.length > 3 ? ' i inne' : ''}`;
-  showNotice(message);
-  beep();
+  showNotice(message); beep();
   if ('Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('Radar Zaborów · samolot w odległości 10 km', { body: message, tag: 'radar-zaborow-10km' }); }
-    catch { /* Niektóre przeglądarki wymagają dodatkowych uprawnień. */ }
+    try { new Notification('Radar Zaborów · samolot w odległości 10 km', { body:message, tag:'radar-zaborow-10km' }); }
+    catch { /* Powiadomienia zależą od przeglądarki. */ }
   }
 }
-
+function scheduleNext(ms) {
+  clearTimeout(nextTimer);
+  if (document.hidden) return;
+  nextTimer = setTimeout(update, ms);
+}
 async function update() {
-  const currentRequest = ++updateNumber;
+  clearTimeout(nextTimer);
+  const id = ++updateNumber;
   if (controller) controller.abort();
   controller = new AbortController();
-  const selected = radius;
-  el('status').textContent = `Aktualizacja · ${selected} km…`;
+  const chosen = radius;
+  let nextMs = QUIET_REFRESH_MS;
+  el('status').textContent = `Aktualizacja · ${chosen.toLocaleString('pl-PL')} km…`;
   try {
-    const r = await fetch(`/api/flights?radius=${selected}`, {cache:'no-store',signal:controller.signal});
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || d.error || `HTTP ${r.status}`);
-    if (currentRequest !== updateNumber) return;
-    render(d);
-    checkEntrants(last);
-    el('status').textContent = `● Radar działa · ${d.source || 'API'}`;
+    const response = await fetch(`/api/flights?radius=${encodeURIComponent(chosen)}`,
+      { cache:'no-store', signal:controller.signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+    if (id !== updateNumber) return;
+    render(data);
+    checkEntrants(Array.isArray(data.nearby_10km) ? data.nearby_10km : last);
+    nextMs = data.count > 0 ? BUSY_REFRESH_MS : QUIET_REFRESH_MS;
+    el('status').textContent = `● Radar działa · ${data.source || 'API'}`;
     el('status').className = 'pill';
   } catch (error) {
-    if (currentRequest !== updateNumber || error.name === 'AbortError') return;
+    if (id !== updateNumber || error.name === 'AbortError') return;
     el('status').textContent = '⚠ Brak połączenia';
     el('status').className = 'pill bad';
-    if (!last.length) el('flights').innerHTML = `<div class="empty">Nie udało się pobrać danych.<p>${safe(error.message)}</p>Spróbuj za chwilę.</div>`;
+    el('refreshInfo').textContent = 'Ponowna próba za 30 s';
+    el('refreshInfo').className = 'speed';
+    if (!last.length) el('flights').innerHTML = `<div class="empty">Nie udało się pobrać danych.<p>${safe(error.message)}</p>Spróbuj ponownie.</div>`;
+  } finally {
+    if (id === updateNumber) scheduleNext(nextMs);
   }
 }
-
-function setRadius(value) {
-  if (radius === value) return;
-  radius = value;
-  document.querySelectorAll('[data-radius]').forEach(button =>
-    button.setAttribute('aria-pressed', String(Number(button.dataset.radius) === radius)));
-  el('radiusInfo').textContent = `Promień: ${radius} km (poziomo)`;
-  el('rangeLabel').textContent = `${radius} km`;
-  el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego zasięgu…</div>';
+function setRadius(newRadius) {
+  if (!validRadius(newRadius)) return;
+  el('radiusError').textContent = '';
+  el('radiusInput').value = String(newRadius);
+  if (radius === newRadius) return;
+  radius = newRadius;
+  try { localStorage.setItem('radar-zaborow-radius', String(radius)); } catch { /* opcjonalne */ }
+  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
+  el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego promienia…</div>';
   update();
 }
-
-document.querySelectorAll('[data-radius]').forEach(button => {
-  button.addEventListener('click', () => setRadius(Number(button.dataset.radius)));
+el('radiusForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const input = el('radiusInput').value.trim().replace(',','.');
+  const radiusValue = Number(input);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(input) || !validRadius(radiusValue)) {
+    el('radiusError').textContent = 'Podaj promień od 1 do 200 km (np. 12,5).';
+    return;
+  }
+  setRadius(radiusValue);
 });
 el('alertToggle').addEventListener('click', async () => {
   alertEnabled = !alertEnabled;
@@ -287,17 +357,19 @@ el('alertToggle').addEventListener('click', async () => {
       const Audio = window.AudioContext || window.webkitAudioContext;
       if (Audio && !audioContext) audioContext = new Audio();
       if (audioContext?.state === 'suspended') audioContext.resume();
-    } catch { /* Tablet może nie obsługiwać Web Audio. */ }
+    } catch { /* brak Web Audio */ }
     if ('Notification' in window && Notification.permission === 'default') {
-      try { await Notification.requestPermission(); } catch { /* Pozostaje alert na stronie. */ }
+      try { await Notification.requestPermission(); } catch { /* tylko alert na stronie */ }
     }
-    showNotice('Alarm aktywny. Powiadomienie pojawi się przy następnym nowym samolocie w promieniu 10 km.');
+    showNotice('Alarm aktywny. Powiadomienie przy nowym samolocie w promieniu 10 km.');
   }
 });
 el('refresh').addEventListener('click', update);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { clearTimeout(nextTimer); if (controller) controller.abort(); }
+  else update();
+});
 update();
-setInterval(() => { if (!document.hidden) update(); }, REFRESH_MS);
 </script>
 </body>
 </html>
