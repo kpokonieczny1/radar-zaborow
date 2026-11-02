@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 4.0 · samoloty na żywo</title>
+  <title>Radar Zaborów 5.0 · samoloty na żywo</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -78,6 +78,10 @@
     .photoArea.failed .photoFallback{display:flex}
     .photoPlaceholder{width:160px;height:108px;border:1px dashed #466887;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#a5bfd7;font-size:11px}
     .photoPlaceholder span{font-size:28px;color:#6cb5ee}
+    .photoSearch{margin-top:7px;font-size:11px;line-height:1.5}
+    .photoSearch a{color:#9ad9ff;text-decoration:underline}
+    .photoPlaceholder{padding:8px;text-align:center}
+    .aircraftPhoto figcaption{word-break:break-word}
     @media (max-width:1100px){.flightMain{grid-template-columns:1fr}.aircraftPhoto>a,.photoPlaceholder{width:160px}}
     @media (max-width:950px){.flightMain{grid-template-columns:160px minmax(0,1fr)}}
     @media (max-width:550px){.flightMain{grid-template-columns:1fr}.flightTop{flex-wrap:wrap}}
@@ -137,7 +141,7 @@
     <a href="https://adsb.fi" target="_blank" rel="noreferrer">ADSB.fi</a>.
     Identyfikacja i trasy: <a href="https://adsbdb.com" target="_blank" rel="noreferrer">ADSBdb</a>,
     <a href="https://adsb.lol" target="_blank" rel="noreferrer">ADSB.lol (weryfikacja tras)</a>.
-    Zdjęcia (jeśli dostępne): <a href="https://www.planespotters.net/" target="_blank" rel="noopener noreferrer">Planespotters.net</a> (autor pod każdym zdjęciem) oraz <a href="https://airport-data.com" target="_blank" rel="noopener noreferrer">airport-data.com</a> (przez ADSBdb). Logotypy: <a href="https://www.aviasales.com/" target="_blank" rel="noopener noreferrer">Aviasales</a>. Trasy są wyświetlane wyłącznie wtedy, gdy dane wydają się wiarygodne; nie są potwierdzonym planem lotu.
+    Zdjęcia (jeśli dostępne): <a href="https://www.jetphotos.com/" target="_blank" rel="noopener noreferrer">JetPhotos</a> (źródłowe zdjęcia i galerie rejestracji), <a href="https://www.planespotters.net/" target="_blank" rel="noopener noreferrer">Planespotters.net</a> (autor pod każdym zdjęciem) oraz <a href="https://airport-data.com" target="_blank" rel="noopener noreferrer">airport-data.com</a> (przez ADSBdb). Logotypy: <a href="https://www.aviasales.com/" target="_blank" rel="noopener noreferrer">Aviasales</a>. Trasy są wyświetlane wyłącznie wtedy, gdy dane wydają się wiarygodne; nie są potwierdzonym planem lotu.
   </footer>
 
 <script>
@@ -173,39 +177,90 @@ function field(label, value) {
 function routeAirport(a) {
   return a ? [a.code, a.name].filter(Boolean).join(' · ') || null : null;
 }
+// JetPhotos: użytkownik wskazał konkretną fotografię SP-LYI. To jest link
+// do oryginalnego pliku na CDN (nie pobieramy i nie hostujemy kopii).
+// Automatyczne pobieranie pełnej bazy JetPhotos wymaga osobnego dostępu/licencji.
+const JETPHOTOS_VERIFIED = Object.freeze({
+  'SP-LYI': {
+    thumbnail: 'https://cdn.jetphotos.com/full/6/403071_1788942970.jpg',
+    link: 'https://www.jetphotos.com/photo/12226928',
+    photographer: 'Paweł Cieplak',
+    source: 'JetPhotos'
+  }
+});
+const AIRLINES = Object.freeze({
+  LOT: { name: 'LOT Polish Airlines', iata: 'LO' },
+  RYR: { name: 'Ryanair', iata: 'FR' },
+  WZZ: { name: 'Wizz Air', iata: 'W6' },
+  DLH: { name: 'Lufthansa', iata: 'LH' },
+  BAW: { name: 'British Airways', iata: 'BA' },
+  KLM: { name: 'KLM', iata: 'KL' },
+  AFR: { name: 'Air France', iata: 'AF' },
+  UAE: { name: 'Emirates', iata: 'EK' },
+  THY: { name: 'Turkish Airlines', iata: 'TK' },
+  SAS: { name: 'Scandinavian Airlines', iata: 'SK' }
+});
+function airlineInfo(f) {
+  const prefix = String(f.flight || '').trim().toUpperCase().slice(0, 3);
+  return AIRLINES[prefix] || null;
+}
+function regCode(f) {
+  const value = String(f.registration || '').trim().toUpperCase();
+  return /^[A-Z0-9-]{3,12}$/.test(value) ? value : null;
+}
+function jetphotosGallery(f) {
+  const reg = regCode(f);
+  return reg ? 'https://www.jetphotos.com/registration/' + encodeURIComponent(reg) : null;
+}
 function photoCaption(photo) {
+  if (photo?.source === 'JetPhotos') {
+    return `© ${safe(photo.photographer)} · <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">JetPhotos</a>`;
+  }
   if (photo?.source === 'Planespotters.net') {
-    return `© ${safe(photo.photographer)} · <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">Planespotters.net</a>`;
+    return `© ${safe(photo.photographer || 'Autor fotografii')} · <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">Planespotters.net</a>`;
   }
   return `<a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">Zdjęcie: airport-data.com / ADSBdb</a>`;
 }
 function photoHTML(f) {
-  const photo = f.photo;
+  const gallery = jetphotosGallery(f);
+  const galleryLink = gallery
+    ? `<div class="photoSearch"><a target="_blank" rel="noopener noreferrer" href="${safe(gallery)}">Galeria ${safe(regCode(f))} na JetPhotos</a></div>`
+    : '';
+  const ownPhoto = regCode(f) ? JETPHOTOS_VERIFIED[regCode(f)] : null;
+  const photo = ownPhoto || f.photo;
   if (!photo?.thumbnail || !photo?.link) {
-    return `<div class="photoPlaceholder" aria-label="Zdjęcie samolotu niedostępne"><span>✈</span>Brak zdjęcia</div>`;
+    return `<div class="photoPlaceholder" aria-label="Zdjęcie samolotu niedostępne"><span>✈</span>Brak miniatury</div>${galleryLink}`;
   }
-  const fallback = f.photo_fallback;
+  // Jeśli CDN JetPhotos nie udostępni obrazu na innej stronie, pokaż
+  // zdjęcie z publicznego API albo czytelny link do oryginału.
+  const fallback = ownPhoto ? f.photo : f.photo_fallback;
   return `<div class="photoArea"><figure class="aircraftPhoto">
-      <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}" title="Zobacz źródło fotografii">
+      <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}" title="Zobacz zdjęcie u autora">
         <img src="${safe(photo.thumbnail)}" alt="Samolot ${safe(f.registration || f.model || f.flight || '')}"
-          loading="eager" referrerpolicy="no-referrer"
+          loading="lazy" referrerpolicy="no-referrer"
           data-alt-src="${safe(fallback?.thumbnail || '')}"
-          data-alt-link="${safe(fallback?.link || '')}"></a>
+          data-alt-link="${safe(fallback?.link || '')}"
+          data-alt-source="${safe(fallback?.source || '')}"
+          data-alt-author="${safe(fallback?.photographer || '')}"></a>
       <figcaption>${photoCaption(photo)}</figcaption>
-    </figure><div class="photoPlaceholder photoFallback"><span>✈</span>Brak zdjęcia</div></div>`;
+    </figure><div class="photoPlaceholder photoFallback"><span>✈</span>Zdjęcie niedostępne · otwórz galerię</div></div>${galleryLink}`;
 }
 function attachPhotoFallbacks() {
   document.querySelectorAll('.photoArea img').forEach(img => {
     img.addEventListener('error', () => {
       if (img.dataset.altSrc) {
-        const altSrc = img.dataset.altSrc;
-        const altLink = img.dataset.altLink;
+        const alternate = {
+          thumbnail: img.dataset.altSrc,
+          link: img.dataset.altLink,
+          source: img.dataset.altSource,
+          photographer: img.dataset.altAuthor
+        };
         img.dataset.altSrc = '';
-        img.src = altSrc;
         const a = img.closest('a');
-        const figcaption = img.closest('figure')?.querySelector('figcaption');
-        if (a && altLink) a.href = altLink;
-        if (figcaption && altLink) figcaption.innerHTML = `<a href="${safe(altLink)}" target="_blank" rel="noopener noreferrer">Zdjęcie: airport-data.com / ADSBdb</a>`;
+        const caption = img.closest('figure')?.querySelector('figcaption');
+        if (a && alternate.link) a.href = alternate.link;
+        if (caption && alternate.link) caption.innerHTML = photoCaption(alternate);
+        img.src = alternate.thumbnail;
       } else {
         img.closest('.photoArea')?.classList.add('failed');
       }
@@ -213,9 +268,10 @@ function attachPhotoFallbacks() {
   });
 }
 function logoHTML(f) {
-  const iata = typeof f.airline_iata === 'string' && /^[A-Z0-9]{2}$/.test(f.airline_iata) ? f.airline_iata : null;
+  const auto = airlineInfo(f);
+  const iata = /^[A-Z0-9]{2}$/.test(f.airline_iata || '') ? f.airline_iata : auto?.iata;
   if (!iata) return '<span class="logoPlaceholder" title="Brak logo">✈</span>';
-  return `<span class="logoWrap"><img src="https://pics.avs.io/100/45/${iata}.png" alt="Logo ${safe(f.operator || iata)}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="logoPlaceholder" hidden>✈</span></span>`;
+  return `<span class="logoWrap"><img src="https://pics.avs.io/100/45/${iata}.png" alt="Logo ${safe(auto?.name || f.operator || iata)}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="logoPlaceholder" hidden>✈</span></span>`;
 }
 function render(data) {
   last = Array.isArray(data.flights) ? data.flights : [];
@@ -236,7 +292,7 @@ function render(data) {
     return `<article class="flight">
       <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
         <strong>${safe(f.flight || f.registration || f.hex || 'Samolot')}</strong>
-        <div class="company">${safe(f.operator || 'Nieznana linia / operator')}</div></div></div>
+        <div class="company">${safe(airlineInfo(f)?.name || f.operator || 'Nieznana linia / operator')}</div></div></div>
         <span class="dist ${near ? 'near' : ''}">${safe(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
       <div class="flightMain"><div>${photoHTML(f)}</div><div class="fields">
         ${field('Samolot', f.model)}${field('Rejestracja',f.registration)}
