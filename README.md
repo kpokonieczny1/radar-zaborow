@@ -1,34 +1,43 @@
-# Radar Zaborów 6.0 – trasy i odświeżanie co 3 sekundy
+# Radar Zaborów 7.0 — konfigurowalny środek i częstotliwość
 
-Cloudflare Pages + funkcja serverless. Punkt obserwacyjny: **52.26294444 N, 20.68608333 E**.
+Projekt na Cloudflare Pages do wyświetlania samolotów na tablecie.
 
-## Co się zmieniło
+## Nowe możliwości
 
-- **3 s** między odczytami pozycji, gdy w ustawionym promieniu widać co najmniej jeden samolot; **30 s**, gdy nie ma samolotów. Po błędzie odczekuje 30 s.
-- Metadane lotów (trasy, rejestracje, zdjęcia) są pobierane osobno, znacznie rzadziej, maksymalnie co 90 s dla znanych maszyn, lub po co najmniej 15 s od poprzedniej próby, jeśli pojawią się nowe. Dzięki temu obraz i logo nie migają co 3 s, a serwisy zewnętrzne nie są niepotrzebnie obciążane.
-- Przebudowana logika tras: ADSB.lol `routeset` + ADSBdb, opcjonalnie HexDB. W pobliżu lotniska bierze pod uwagę wysokość, odległość i prędkość pionową oraz kierunek lotu. Gdy źródła są sprzeczne lub nie pozwalają sensownie określić trasy, karta pokazuje „Nieustalona”. Wyświetlone trasy są **orientacyjne** i nie stanowią potwierdzonego planu lotu.
-- Usunięto dodatkowe linki do galerii JetPhotos i przyciski z kart samolotów, a także linki z dolnej belki. Miniatura z Planespotters.net jest wciąż łączem do oryginalnego zdjęcia (wymagane przez warunki dostawcy) i ma podpis autora. To nie jest osobny przycisk ani widoczny link tekstowy.
-- Zachowano wpisywanie własnego promienia 1–200 km, radar, logotypy, zdjęcia i widoczną strefę 10 km. Nie ma alarmu.
+- **Środek radaru:** dowolna szerokość i długość geograficzna. Domyślnie Zaborów: `52.2629444444, 20.6860833333` (52°15′46,6″ N, 20°41′09,9″ E).
+- **Współrzędne:** wpisuj stopnie dziesiętne, np. `52.26294444` i `20.68608333`, lub stopnie/minuty/sekundy, np. `52 15 46,6` oraz `20 41 09,9`. Dopuszczalne są również oznaczenia N/S/E/W.
+- **Promień:** 1–200 km.
+- **Częstotliwość przy obecności samolotu:** dowolna liczba całkowita od 3 do 300 sekund, domyślnie 3 s. Bez samolotów przeglądarka sprawdza dane co 30 s.
+- **Przycisk „Środek: Zaborów”:** przywraca domyślne współrzędne, zachowując promień i częstotliwość wpisane w formularzu.
+- Wszystkie ustawienia zapisywane są lokalnie w przeglądarce, gdy jej mechanizm localStorage jest dostępny.
 
-## Instalacja
+Ważne: współrzędne są przekazywane do **API**, które rzeczywiście pobiera i filtruje pozycje względem nowego środka. Radar na ekranie też jest przeliczany. Zdjęcia, logotypy i trasy zachowują sposób działania z wersji 6.0. Metadane są odświeżane rzadziej (około 90 s), żeby nie obciążać baz zdjęć i tras.
 
-W repozytorium `kpokonieczny1/radar-zaborow` zastąp dwa pliki:
+## Aktualizacja
 
-1. Plik główny `index.html`.
-2. `functions/api/flights.js`.
+W repozytorium GitHub `kpokonieczny1/radar-zaborow` podmień **oba** pliki:
 
-Zatwierdź zmiany (**Commit changes**). Cloudflare Pages wdroży je automatycznie. Po zakończeniu otwórz https://radar-zaborow.pages.dev/ i zrób Ctrl+F5.
+1. `index.html`
+2. `functions/api/flights.js`
 
-## Testowanie
+Możesz to zrobić przez **Add file → Upload files** w odpowiednim katalogu. Potem kliknij **Commit changes**. Cloudflare Pages powinien automatycznie wdrożyć zmiany, zachowując adres `https://radar-zaborow.pages.dev/`.
 
-- **Pozycje bez obciążających dodatków**: `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=positions`
-- **Pozycje + trasy + zdjęcia**: `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=full`
+Nie wgrywaj folderu `radar-zaborow-v7` jako dodatkowego katalogu repozytorium. Plik `index.html` musi być w jego katalogu głównym, a `flights.js` — w `functions/api/`.
 
-Przy działającym połączeniu pierwszy endpoint zwraca `count`, `flights`, `inside_10km`; drugi dodatkowo pola `from`, `to`, `route_status`, `photo`. Kiedy nie ma danych o trasie, pola `from` i `to` będą `null` – to uczciwsze niż błędny kierunek lotu.
+## API i test
 
-## Ważne ograniczenia
+- Pozycje (domyślny środek): `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=positions`
+- Pozycje (własny środek): `https://radar-zaborow.pages.dev/api/flights?lat=52.26294444&lon=20.68608333&radius=20&mode=positions`
+- Metadane tras i zdjęć (własny środek): `https://radar-zaborow.pages.dev/api/flights?lat=52.26294444&lon=20.68608333&radius=20&mode=full`
 
-- 3 sekundy to częstotliwość **prób odświeżenia**. Dane ADS-B niekoniecznie zmieniają się tak szybko, a gdy serwer lub dostawca ogranicza ruch (np. 429/403), aplikacja zwalnia do 30 s. Jeżeli ruch na tablecie byłby stale aktywny przez całą dobę, oznacza to do ok. 28 800 odczytów pozycji dziennie; trzeba respektować regulaminy dostawców i ich zmienne limity API.
-- Po zablokowaniu/uśpieniu tabletu przeglądarka może zawiesić JavaScript.
-- Jedna fotografia SP-LYI pochodzi z ręcznie wskazanego odnośnika JetPhotos i może być niedostępna w trybie osadzania. **Przed jej publicznym eksponowaniem należy upewnić się, że fotograf udzielił zgody lub zastosować dozwoloną formę osadzania**. Można usunąć wpis `SP-LYI` w obiekcie `USER_PHOTOS` w `index.html`, aby go wyłączyć.
-- Żaden otwarty katalog tras nie gwarantuje aktualnej trasy danego rejsu. Pełna zgodność z Flightradar24 wymaga odrębnego źródła danych/licencji.
+Odpowiedź JSON zawiera `center`, `radius_km`, `count`, `flights` i `inside_10km`. Parametry `lat` i `lon` są opcjonalne — gdy ich nie podasz, przyjmowany jest Zaborów. W parametrach URL używaj kropki dziesiętnej.
+
+## Ograniczenia
+
+- 3 sekundy to odstęp **między próbami pobierania danych**, liczony po zakończeniu poprzedniego zapytania. Nie gwarantuje to odświeżenia pozycji przez dostawcę ADS-B co 3 sekundy.
+- Przy błędzie serwisu próby są zwalniane do 30 s. Dostawcy danych mogą mieć limity liczby zapytań; sprawdź warunki korzystania.
+- Przeglądarka tabletu może wstrzymać odświeżanie, gdy karta jest w tle albo ekran zostanie wygaszony.
+- Zewnętrzne zdjęcia nie zawsze są dostępne; zdjęcie SP-LYI wskazane ręcznie przez użytkownika podlega warunkom JetPhotos i prawom autora.
+- Trasy z otwartych katalogów są orientacyjne. Nie są gwarantowanym, aktualnym planem lotu.
+
+Wersję 7.0 przetestowano składniowo oraz na symulowanych odpowiedziach API i symulacji interakcji z formularzem. Nie wykonano testu na produkcyjnym Cloudflare.

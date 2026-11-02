@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 6.0 · samoloty na żywo</title>
+  <title>Radar Zaborów 7.0 · samoloty na żywo</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -22,6 +22,21 @@
     button:hover{background:#3784bb}
     button:focus-visible{outline:3px solid #97dbff;outline-offset:2px}
     .controls .hint{font-size:12px;color:#9cb2cc}
+    .settingsForm{display:flex;align-items:end;gap:11px;flex-wrap:wrap;width:100%}
+    .settingField{display:flex;flex-direction:column;gap:4px;min-width:94px}
+    .settingField label{font-size:12px;color:#bcd5eb;font-weight:650}
+    .settingField small{font-size:11px;color:#90aeca}
+    .settingInput{width:100%;min-height:41px;padding:9px 10px;background:#091828;border:1px solid #5b7da0;border-radius:10px;color:#fff;font:inherit;font-size:16px}
+    .settingInput:focus{outline:2px solid #79caff;outline-offset:2px}
+    .settingField.radius{width:100px}
+    .settingField.coord{width:185px}
+    .settingField.interval{width:125px}
+    .settingsActions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+    .secondaryButton{background:transparent;border:1px solid #517598}
+    .secondaryButton:hover{background:#254563}
+    .settingsError{width:100%;font-size:12px;color:#ffb4a8;min-height:0}
+    .settingsStatus{width:100%;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:1px}
+    .centerInfo{font-size:12px;color:#a7c4db}
     .layout{display:grid;grid-template-columns:minmax(290px,0.85fr) minmax(420px,1.5fr);gap:17px;align-items:start}
     .panel{border:1px solid #2c435d;background:#111f33;border-radius:18px;padding:19px;min-width:0}
     .sectionHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
@@ -52,11 +67,6 @@
     @media (max-width:950px){body{padding:12px}.layout{grid-template-columns:1fr}.panel{padding:15px}.radar{max-width:430px}}
     @media (max-width:480px){.controls{gap:8px}.fields{gap:11px}.panel{padding:12px}.flight{padding:12px}.flightMain{grid-template-columns:1fr}.aircraftPhoto{max-width:220px}.flightTop{align-items:flex-start}}
 
-    .radiusForm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .radiusForm label{font-size:14px;color:#bbd4eb;font-weight:650}
-    .radiusInput{width:100px;min-height:41px;padding:9px 10px;background:#091828;border:1px solid #5b7da0;border-radius:10px;color:#fff;font:inherit;font-size:16px}
-    .radiusInput:focus{outline:2px solid #79caff;outline-offset:2px}
-    .error{font-size:12px;color:#ffb4a8}
     .speed{color:#a8bdd2;font-size:12px}
     .speed.fast{color:#6de7ac;font-weight:700}
     .flightIdentity{display:flex;align-items:center;gap:11px;min-width:0}
@@ -90,25 +100,45 @@
   <header class="header">
     <div>
       <h1>✈ Radar Zaborów</h1>
-      <p class="sub">Samoloty wokół Zaborowa · 52°15′46,6″ N, 20°41′09,9″ E</p>
+      <p class="sub" id="centerSubtitle">Samoloty wokół Zaborowa · 52°15′46,6″ N, 20°41′09,9″ E</p>
     </div>
     <div class="pill" id="status" role="status">Łączenie z radarem…</div>
   </header>
 
   <nav class="controls" aria-label="Ustawienia radaru">
-    <form class="radiusForm" id="radiusForm">
-      <label for="radiusInput">Promień (km)</label>
-      <input class="radiusInput" id="radiusInput" type="text" inputmode="decimal" autocomplete="off" value="10" aria-describedby="radiusError" maxlength="6">
-      <button type="submit">Ustaw</button>
-      <span id="radiusError" class="error" role="alert"></span>
+    <form class="settingsForm" id="settingsForm" novalidate>
+      <div class="settingField radius">
+        <label for="radiusInput">Promień (km)</label>
+        <input class="settingInput" id="radiusInput" type="text" inputmode="decimal" autocomplete="off" value="10" maxlength="6">
+      </div>
+      <div class="settingField coord">
+        <label for="latitudeInput">Szerokość geogr.</label>
+        <input class="settingInput" id="latitudeInput" type="text" inputmode="decimal" autocomplete="off" value="52.26294444" aria-describedby="coordsHint">
+      </div>
+      <div class="settingField coord">
+        <label for="longitudeInput">Długość geogr.</label>
+        <input class="settingInput" id="longitudeInput" type="text" inputmode="decimal" autocomplete="off" value="20.68608333" aria-describedby="coordsHint">
+      </div>
+      <div class="settingField interval">
+        <label for="activeIntervalInput">Gdy leci samolot (s)</label>
+        <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="3" max="300" step="1" value="3">
+      </div>
+      <div class="settingsActions">
+        <button type="submit">Zastosuj</button>
+        <button type="button" class="secondaryButton" id="restoreCenter">Środek: Zaborów</button>
+      </div>
+      <span id="settingsError" class="settingsError" role="alert" aria-live="polite"></span>
+      <div class="settingsStatus">
+        <span id="coordsHint" class="hint">Współrzędne dziesiętne lub stopnie, minuty i sekundy (np. 52 15 46,6).</span>
+        <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
+      </div>
     </form>
-    <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
   </nav>
 
   <main class="layout">
     <section class="panel" aria-label="Radar pozycji">
       <div class="sectionHead"><h2>Pozycje</h2><span class="pill" id="count">—</span></div>
-      <svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Pozycje samolotów wokół Zaborowa">
+      <svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Pozycje samolotów wokół środka radaru">
         <circle cx="200" cy="200" r="178" fill="#102a38"/>
         <circle class="zone" id="zone10" cx="200" cy="200" r="178"/>
         <circle class="ring" id="ringHalf" cx="200" cy="200" r="89"/>
@@ -118,7 +148,7 @@
         <text x="205" y="18">N</text>
         <text id="rangeLabel" x="205" y="35">10 km</text>
         <circle cx="200" cy="200" r="5" fill="#f8c56f"/>
-        <text x="211" y="212">Zaborów</text>
+        <text id="radarCenterName" x="211" y="212">Zaborów</text>
         <g id="dots"></g>
       </svg>
       <div class="stats">
@@ -142,10 +172,8 @@
 
 <script>
 'use strict';
-const HOME_LAT = 52.0667;//52.2629444444;
-const HOME_LON = 21.0333;//20.6860833333;
+const DEFAULT_CENTER = Object.freeze({lat:52.2629444444, lon:20.6860833333});
 const DEG = Math.PI / 180;
-const ACTIVE_MS = 5000;         // dokładnie 3 s po odpowiedzi serwera
 const IDLE_MS = 30000;
 const METADATA_MS = 90000;      // zdjęcia i trasy najwyżej raz na 90 s
 const NEW_PLANE_METADATA_MS = 15000;
@@ -154,6 +182,27 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const textOrDash = value => value == null || value === '' ? 'Brak danych' : String(value);
 const goodRadius = n => Number.isFinite(n) && n >= 1 && n <= 200;
+const goodInterval = n => Number.isInteger(n) && n >= 3 && n <= 300;
+const isDefaultCenter = c => Math.abs(c.lat - DEFAULT_CENTER.lat) < 0.00000001
+  && Math.abs(c.lon - DEFAULT_CENTER.lon) < 0.00000001;
+const formatCoord = n => n.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+// Współrzędne: 52.26294444 lub 52 15 46,6; opcjonalnie N/S/E/W.
+function parseCoord(value, limit) {
+  let input = String(value).trim().toUpperCase();
+  const hemisphere = (input.match(/[NSEW]$/) || [])[0];
+  if (hemisphere) input = input.slice(0, -1).trim();
+  const parts = input.replace(/[°º′'″"\s]+/g, ' ').trim().split(' ');
+  if (parts.length < 1 || parts.length > 3 || !parts.every(p => /^[+-]?\d+(?:[.,]\d+)?$/.test(p))) return null;
+  const numbers = parts.map(p => Number(p.replace(',', '.')));
+  if (parts.length > 1 && (!Number.isInteger(numbers[0]) || !Number.isInteger(numbers[1])
+      || numbers[1] >= 60 || numbers[1] < 0 || (parts.length === 3 && (numbers[2] >= 60 || numbers[2] < 0)))) return null;
+  const sign = numbers[0] < 0 || hemisphere === 'S' || hemisphere === 'W' ? -1 : 1;
+  const valueDeg = sign * (Math.abs(numbers[0]) + (numbers[1] || 0)/60 + (numbers[2] || 0)/3600);
+  if (!Number.isFinite(valueDeg) || Math.abs(valueDeg) > limit) return null;
+  if ((limit === 90 && (hemisphere === 'E' || hemisphere === 'W'))
+      || (limit === 180 && (hemisphere === 'N' || hemisphere === 'S'))) return null;
+  return valueDeg;
+}
 const AIRLINES = Object.freeze({
   LOT: ['LOT Polish Airlines','LO'], RYR: ['Ryanair','FR'], WZZ: ['Wizz Air','W6'],
   DLH: ['Lufthansa','LH'], BAW: ['British Airways','BA'], KLM: ['KLM','KL'],
@@ -224,11 +273,31 @@ function flightCard(f) {
 }
 
 let radius = 10;
+let center = { ...DEFAULT_CENTER };
+let activeMs = 3000;
 try {
-  const saved = Number(localStorage.getItem('radar-zaborow-radius'));
-  if (goodRadius(saved)) radius = saved;
+  const savedRadius = Number(localStorage.getItem('radar-zaborow-radius'));
+  const savedLat = Number(localStorage.getItem('radar-zaborow-lat'));
+  const savedLon = Number(localStorage.getItem('radar-zaborow-lon'));
+  const savedInterval = Number(localStorage.getItem('radar-zaborow-active-seconds'));
+  if (goodRadius(savedRadius)) radius = savedRadius;
+  if (localStorage.getItem('radar-zaborow-lat') !== null && localStorage.getItem('radar-zaborow-lon') !== null
+    && Number.isFinite(savedLat) && Number.isFinite(savedLon)
+    && Math.abs(savedLat) <= 90 && Math.abs(savedLon) <= 180) center = {lat:savedLat, lon:savedLon};
+  if (goodInterval(savedInterval)) activeMs = savedInterval * 1000;
 } catch { /* pamięć opcjonalna */ }
 el('radiusInput').value = String(radius);
+el('latitudeInput').value = formatCoord(center.lat);
+el('longitudeInput').value = formatCoord(center.lon);
+el('activeIntervalInput').value = String(activeMs / 1000);
+function renderCenter() {
+  const home = isDefaultCenter(center);
+  const display = `${formatCoord(center.lat)}°, ${formatCoord(center.lon)}°`;
+  el('centerSubtitle').textContent = (home ? 'Samoloty wokół Zaborowa' : 'Samoloty wokół wybranego punktu') + ' · ' + display;
+  el('radarCenterName').textContent = home ? 'Zaborów' : 'Środek';
+  el('radar').setAttribute('aria-label', `Pozycje samolotów względem punktu ${display}`);
+}
+renderCenter();
 
 let current = [];
 let meta = new Map();
@@ -238,6 +307,7 @@ let detailAbort = null;
 let detailInFlight = false;
 let lastDetailAttempt = 0;
 let requestEpoch = 0;
+let pollSerial = 0;
 let cardKeys = '';
 
 function merged(plane) {
@@ -251,8 +321,8 @@ function radarPoints() {
   let svg = '';
   for (const f of current) {
     if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
-    const dx = (f.lon - HOME_LON) * Math.cos(HOME_LAT * DEG) * 111.2;
-    const dy = (f.lat - HOME_LAT) * 111.2;
+    const dx = (f.lon - center.lon) * Math.cos(center.lat * DEG) * 111.2;
+    const dy = (f.lat - center.lat) * 111.2;
     const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
     if (Math.hypot(x - 200, y - 200) > 178) continue;
     svg += `<g><circle class="dot ${f.km <= 10 ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
@@ -318,7 +388,8 @@ function updateVisuals(data) {
   const dt = new Date(data.updated);
   el('time').textContent = 'Stan: ' + (Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pl-PL') : '—');
   const fast = current.length > 0;
-  el('refreshInfo').textContent = fast ? 'Co 3 s · wykryto samolot' : 'Co 30 s · brak samolotów';
+  el('refreshInfo').textContent = fast
+    ? `Co ${activeMs / 1000} s · wykryto samolot` : 'Co 30 s · brak samolotów';
   el('refreshInfo').className = fast ? 'speed fast' : 'speed';
   radarPoints();
   paintCards();
@@ -326,6 +397,12 @@ function updateVisuals(data) {
 function schedule(ms) {
   clearTimeout(timer);
   if (!document.hidden) timer = setTimeout(pollPositions, ms);
+}
+function apiUrl(mode) {
+  const params = new URLSearchParams({
+    radius: String(radius), lat: String(center.lat), lon: String(center.lon), mode,
+  });
+  return `/api/flights?${params}`;
 }
 async function enrichIfNeeded(epoch) {
   if (!current.length || detailInFlight || document.hidden) return;
@@ -336,7 +413,7 @@ async function enrichIfNeeded(epoch) {
   detailInFlight = true;
   detailAbort = new AbortController();
   try {
-    const response = await fetch(`/api/flights?radius=${encodeURIComponent(radius)}&mode=full`,
+    const response = await fetch(apiUrl('full'),
       { cache:'no-store', signal:detailAbort.signal });
     if (!response.ok) return;
     const data = await response.json();
@@ -358,23 +435,24 @@ async function pollPositions() {
   clearTimeout(timer);
   if (document.hidden) return;
   const epoch = requestEpoch;
+  const serial = ++pollSerial;
   if (positionAbort) positionAbort.abort();
   positionAbort = new AbortController();
-  let next = current.length ? ACTIVE_MS : IDLE_MS;
+  let next = current.length ? activeMs : IDLE_MS;
   el('status').textContent = 'Aktualizacja…';
   try {
-    const res = await fetch(`/api/flights?radius=${encodeURIComponent(radius)}&mode=positions`,
+    const res = await fetch(apiUrl('positions'),
       { cache:'no-store', signal:positionAbort.signal });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
-    if (epoch !== requestEpoch) return;
+    if (epoch !== requestEpoch || serial !== pollSerial) return;
     updateVisuals(data);
-    next = current.length ? ACTIVE_MS : IDLE_MS;
+    next = current.length ? activeMs : IDLE_MS;
     el('status').textContent = `● Radar działa · ${data.source || 'ADS-B'}`;
     el('status').className = 'pill';
     void enrichIfNeeded(epoch);
   } catch (error) {
-    if (epoch !== requestEpoch || error.name === 'AbortError') return;
+    if (epoch !== requestEpoch || serial !== pollSerial || error.name === 'AbortError') return;
     el('status').textContent = '⚠ Brak połączenia';
     el('status').className = 'pill bad';
     el('refreshInfo').textContent = 'Ponowna próba za 30 s';
@@ -383,33 +461,69 @@ async function pollPositions() {
     next = IDLE_MS;
     if (!current.length) el('flights').innerHTML = `<div class="empty">Błąd pobierania danych: ${escapeHtml(error.message)}</div>`;
   } finally {
-    if (epoch === requestEpoch) schedule(next);
+    if (epoch === requestEpoch && serial === pollSerial) schedule(next);
   }
 }
-function setRadius(newRadius) {
-  if (!goodRadius(newRadius)) return;
-  el('radiusError').textContent = '';
-  el('radiusInput').value = String(newRadius);
-  if (radius === newRadius) return;
+function applySettings(newRadius, newCenter, newMs) {
+  const changedArea = radius !== newRadius || center.lat !== newCenter.lat || center.lon !== newCenter.lon;
   radius = newRadius;
+  center = newCenter;
+  activeMs = newMs;
+  el('settingsError').textContent = '';
+  el('radiusInput').value = String(radius);
+  el('latitudeInput').value = formatCoord(center.lat);
+  el('longitudeInput').value = formatCoord(center.lon);
+  el('activeIntervalInput').value = String(activeMs / 1000);
+  renderCenter();
+  try {
+    localStorage.setItem('radar-zaborow-radius', String(radius));
+    localStorage.setItem('radar-zaborow-lat', String(center.lat));
+    localStorage.setItem('radar-zaborow-lon', String(center.lon));
+    localStorage.setItem('radar-zaborow-active-seconds', String(activeMs / 1000));
+  } catch {}
+  if (!changedArea) {
+    el('refreshInfo').textContent = current.length
+      ? `Co ${activeMs / 1000} s · wykryto samolot` : 'Co 30 s · brak samolotów';
+    schedule(current.length ? activeMs : IDLE_MS);
+    return;
+  }
   requestEpoch++;
   cardKeys = '';
   current = [];
+  meta.clear();
+  lastDetailAttempt = 0;
   if (positionAbort) positionAbort.abort();
   if (detailAbort) detailAbort.abort();
-  try { localStorage.setItem('radar-zaborow-radius', String(radius)); } catch {}
-  el('flights').innerHTML = '<div class="empty">Pobieranie danych…</div>';
+  el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego środka radaru…</div>';
+  el('count').textContent = '—';
+  el('nearCount').textContent = '—';
+  el('allCount').textContent = '—';
+  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
+  radarPoints();
   void pollPositions();
 }
-el('radiusForm').addEventListener('submit', event => {
+el('settingsForm').addEventListener('submit', event => {
   event.preventDefault();
-  const raw = el('radiusInput').value.trim().replace(',', '.');
-  const n = Number(raw);
-  if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || !goodRadius(n)) {
-    el('radiusError').textContent = 'Podaj promień 1–200 km (np. 12,5).';
-    return;
+  const rawRadius = el('radiusInput').value.trim().replace(',', '.');
+  const newRadius = Number(rawRadius);
+  const lat = parseCoord(el('latitudeInput').value, 90);
+  const lon = parseCoord(el('longitudeInput').value, 180);
+  const rawInterval = el('activeIntervalInput').value.trim();
+  const interval = Number(rawInterval);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(rawRadius) || !goodRadius(newRadius)) {
+    el('settingsError').textContent = 'Podaj promień 1–200 km (np. 12,5).';
+  } else if (lat === null || lon === null) {
+    el('settingsError').textContent = 'Nieprawidłowe współrzędne. Podaj stopnie dziesiętne lub stopnie, minuty i sekundy.';
+  } else if (!/^\d+$/.test(rawInterval) || !goodInterval(interval)) {
+    el('settingsError').textContent = 'Częstotliwość przy wykryciu samolotu: od 3 do 300 sekund (liczba całkowita).';
+  } else {
+    applySettings(newRadius, {lat, lon}, interval * 1000);
   }
-  setRadius(n);
+});
+el('restoreCenter').addEventListener('click', () => {
+  el('latitudeInput').value = formatCoord(DEFAULT_CENTER.lat);
+  el('longitudeInput').value = formatCoord(DEFAULT_CENTER.lon);
+  el('settingsForm').requestSubmit();
 });
 el('refresh').addEventListener('click', () => { clearTimeout(timer); void pollPositions(); });
 document.addEventListener('visibilitychange', () => {
