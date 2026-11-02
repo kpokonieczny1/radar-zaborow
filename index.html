@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 7.0 · samoloty na żywo</title>
+  <title>Radar Zaborów 9.0 · samoloty na żywo</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -94,6 +94,29 @@
     @media (max-width:1100px){.flightMain{grid-template-columns:1fr}.aircraftPhoto>a,.photoPlaceholder{width:160px}}
     @media (max-width:950px){.flightMain{grid-template-columns:160px minmax(0,1fr)}}
     @media (max-width:550px){.flightMain{grid-template-columns:1fr}.flightTop{flex-wrap:wrap}}
+    /* Czytelny, niezależny od pozostałych danych panel trasy. */
+    .flightData{min-width:0}
+    .routeStrip{margin-top:12px;display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);
+      align-items:center;gap:8px}
+    .routeAirport{background:#0d2034;border:1px solid #345777;border-radius:11px;
+      padding:11px 12px;min-width:0;min-height:94px}
+    .routeAirport.origin{border-left:4px solid #6bbaff}
+    .routeAirport.destination{border-left:4px solid #62d7a5}
+    .routeCaption{display:block;color:#a7bfd9;font-size:11px;font-weight:700;letter-spacing:.08em;
+      text-transform:uppercase;margin-bottom:7px}
+    .routePrimary{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .routeCode{font-size:clamp(17px,2.3vw,22px);font-weight:850;line-height:1.1;color:#fff;
+      letter-spacing:.02em}
+    .routeCountry{font-size:11px;font-weight:750;letter-spacing:.04em;color:#ffdf9c;
+      background:#3f3526;border:1px solid #6c5733;border-radius:6px;padding:3px 6px}
+    .routeAirportName{margin-top:5px;color:#cee2f4;font-size:13px;font-weight:650;
+      line-height:1.35;overflow-wrap:anywhere}
+    .routeArrow{font-size:23px;color:#8ebbdc;text-align:center}
+    .routeUnavailable{margin-top:12px;padding:11px 12px;border:1px dashed #47627c;
+      border-radius:10px;color:#a9bed2;font-size:13px}
+    @media (max-width:520px){.routeStrip{grid-template-columns:1fr;gap:5px}
+      .routeArrow{font-size:18px;transform:rotate(90deg);line-height:1}
+      .routeAirport{min-height:auto}}
   </style>
 </head>
 <body>
@@ -166,6 +189,7 @@
   <footer class="foot">
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
     ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
+    Kraj lotniska: kod ISO 3166-1 alpha-3, jeśli udostępnia go baza danych.
     Trasy są orientacyjne i nie stanowią potwierdzonego planu lotu.
     Przy wygaszonym ekranie tablet może wstrzymywać odświeżanie.
   </footer>
@@ -222,7 +246,27 @@ function k(plane) { return String(plane.hex || plane.flight || plane.registratio
 function field(label, value, role = '') {
   return `<div><span class="label">${escapeHtml(label)}</span><div class="value"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</div></div>`;
 }
-function airportText(a) { return a ? [a.code, a.name].filter(Boolean).join(' · ') : 'Nieustalona'; }
+function routeAirportHTML(airport, direction) {
+  const departure = direction === 'origin';
+  const code = airport?.code || '—';
+  const country = /^[A-Z]{3}$/.test(airport?.country_iso3 || '') ? airport.country_iso3 : '';
+  const label = departure ? 'Wylot' : 'Przylot';
+  const name = airport?.name || 'Nazwa lotniska nieznana';
+  return `<div class="routeAirport ${departure ? 'origin' : 'destination'}">
+    <span class="routeCaption">${label}</span>
+    <div class="routePrimary"><strong class="routeCode">${escapeHtml(code)}</strong>
+      ${country ? `<span class="routeCountry" title="Kod kraju ISO 3166-1 alpha-3">${escapeHtml(country)}</span>` : ''}
+    </div>
+    <div class="routeAirportName">${escapeHtml(name)}</div></div>`;
+}
+function routeHTML(f) {
+  if (!f.from || !f.to) return '<div class="routeUnavailable">Trasa nieustalona</div>';
+  return `<div class="routeStrip" aria-label="Trasa lotu">
+    ${routeAirportHTML(f.from, 'origin')}
+    <span class="routeArrow" aria-hidden="true">➜</span>
+    ${routeAirportHTML(f.to, 'destination')}
+  </div>`;
+}
 function flightDetails(f) {
   const ident = String(f.flight || '').slice(0, 3).toUpperCase();
   const airline = AIRLINES[ident];
@@ -263,13 +307,14 @@ function flightCard(f) {
       <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
       <div class="company">${escapeHtml(company.name)}</div></div></div>
       <span class="dist ${near ? 'near' : ''}" data-role="dist">${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
-    <div class="flightMain"><div>${photoHTML(f)}</div><div class="fields">
-      ${field('Samolot', f.model)}${field('Rejestracja', f.registration)}
-      ${field('Skąd', hasRoute ? airportText(f.from) : 'Nieustalona')}
-      ${field('Dokąd', hasRoute ? airportText(f.to) : 'Nieustalona')}
-      ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
-      ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
-    </div></div>${hasRoute ? `<div class="routeNote">Trasa ${escapeHtml(f.route_status || 'orientacyjna')} · nie jest potwierdzonym planem lotu</div>` : ''}</article>`;
+    <div class="flightMain"><div>${photoHTML(f)}</div><div class="flightData">
+      <div class="fields">
+        ${field('Samolot', f.model)}${field('Rejestracja', f.registration)}
+        ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
+        ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
+      </div>
+      ${routeHTML(f)}
+    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · dane niezweryfikowane</div>` : ''}</article>`;
 }
 
 let radius = 10;
@@ -422,7 +467,7 @@ async function enrichIfNeeded(epoch) {
       meta.set(k(f), {
         registration:f.registration, model:f.model, operator:f.operator,
         airline_iata:f.airline_iata, from:f.from, to:f.to,
-        route_status:f.route_status, photo:f.photo, photo_fallback:f.photo_fallback,
+        route_status:f.route_status, route_source:f.route_source, route_plausible:f.route_plausible, photo:f.photo, photo_fallback:f.photo_fallback,
       });
     }
     // Ograniczamy pamięć tabletu po wielu godzinach pracy.

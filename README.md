@@ -1,43 +1,26 @@
-# Radar Zaborów 7.0 — konfigurowalny środek i częstotliwość
+# Radar Zaborów 9.0 — trasy z API bez filtrowania
 
-Projekt na Cloudflare Pages do wyświetlania samolotów na tablecie.
+Zmiana względem wersji 8.0: trasy z baz danych są **wyświetlane nawet wtedy, gdy nie przejdą wcześniejszej heurystycznej kontroli położenia samolotu**. Dotyczy to też odpowiedzi ADSB.lol z `plausible: false`.
 
-## Nowe możliwości
+## Jak wybierana jest trasa
 
-- **Środek radaru:** dowolna szerokość i długość geograficzna. Domyślnie Zaborów: `52.2629444444, 20.6860833333` (52°15′46,6″ N, 20°41′09,9″ E).
-- **Współrzędne:** wpisuj stopnie dziesiętne, np. `52.26294444` i `20.68608333`, lub stopnie/minuty/sekundy, np. `52 15 46,6` oraz `20 41 09,9`. Dopuszczalne są również oznaczenia N/S/E/W.
-- **Promień:** 1–200 km.
-- **Częstotliwość przy obecności samolotu:** dowolna liczba całkowita od 3 do 300 sekund, domyślnie 3 s. Bez samolotów przeglądarka sprawdza dane co 30 s.
-- **Przycisk „Środek: Zaborów”:** przywraca domyślne współrzędne, zachowując promień i częstotliwość wpisane w formularzu.
-- Wszystkie ustawienia zapisywane są lokalnie w przeglądarce, gdy jej mechanizm localStorage jest dostępny.
+1. **ADSB.lol Routeset** — jeśli wskazuje oba lotniska (nawet przy `plausible: false`).
+2. **ADSBdb** — jeśli ADSB.lol nie zwróciło kompletnej trasy.
+3. **HexDB** — jeśli dwie poprzednie bazy nie podały trasy.
 
-Ważne: współrzędne są przekazywane do **API**, które rzeczywiście pobiera i filtruje pozycje względem nowego środka. Radar na ekranie też jest przeliczany. Zdjęcia, logotypy i trasy zachowują sposób działania z wersji 6.0. Metadane są odświeżane rzadziej (około 90 s), żeby nie obciążać baz zdjęć i tras.
+Na karcie pojawia się „Źródło trasy: ... · dane niezweryfikowane”. To jest **informacja z katalogu lotów, a nie potwierdzona aktualna trasa**. Czasami baza zwróci trasę historyczną lub błędną. Gdy żadna baza nie zna trasy, wciąż wyświetla się „Trasa nieustalona”.
 
 ## Aktualizacja
 
-W repozytorium GitHub `kpokonieczny1/radar-zaborow` podmień **oba** pliki:
+W repozytorium `kpokonieczny1/radar-zaborow` podmień:
 
-1. `index.html`
-2. `functions/api/flights.js`
+- `index.html` (katalog główny),
+- `functions/api/flights.js` (zachowaj katalogi).
 
-Możesz to zrobić przez **Add file → Upload files** w odpowiednim katalogu. Potem kliknij **Commit changes**. Cloudflare Pages powinien automatycznie wdrożyć zmiany, zachowując adres `https://radar-zaborow.pages.dev/`.
+Zatwierdź **Commit changes**. Cloudflare Pages automatycznie opublikuje aktualizację pod adresem `https://radar-zaborow.pages.dev/`.
 
-Nie wgrywaj folderu `radar-zaborow-v7` jako dodatkowego katalogu repozytorium. Plik `index.html` musi być w jego katalogu głównym, a `flights.js` — w `functions/api/`.
+Po wdrożeniu możesz sprawdzić dane bezpośrednio w JSON: `https://radar-zaborow.pages.dev/api/flights?radius=30&mode=full`.
 
-## API i test
+Nie zmieniono ustawień współrzędnych (domyślnie Zaborów: 52.2629444444, 20.6860833333), promienia, częstotliwości odświeżania, zdjęć ani logotypów.
 
-- Pozycje (domyślny środek): `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=positions`
-- Pozycje (własny środek): `https://radar-zaborow.pages.dev/api/flights?lat=52.26294444&lon=20.68608333&radius=20&mode=positions`
-- Metadane tras i zdjęć (własny środek): `https://radar-zaborow.pages.dev/api/flights?lat=52.26294444&lon=20.68608333&radius=20&mode=full`
-
-Odpowiedź JSON zawiera `center`, `radius_km`, `count`, `flights` i `inside_10km`. Parametry `lat` i `lon` są opcjonalne — gdy ich nie podasz, przyjmowany jest Zaborów. W parametrach URL używaj kropki dziesiętnej.
-
-## Ograniczenia
-
-- 3 sekundy to odstęp **między próbami pobierania danych**, liczony po zakończeniu poprzedniego zapytania. Nie gwarantuje to odświeżenia pozycji przez dostawcę ADS-B co 3 sekundy.
-- Przy błędzie serwisu próby są zwalniane do 30 s. Dostawcy danych mogą mieć limity liczby zapytań; sprawdź warunki korzystania.
-- Przeglądarka tabletu może wstrzymać odświeżanie, gdy karta jest w tle albo ekran zostanie wygaszony.
-- Zewnętrzne zdjęcia nie zawsze są dostępne; zdjęcie SP-LYI wskazane ręcznie przez użytkownika podlega warunkom JetPhotos i prawom autora.
-- Trasy z otwartych katalogów są orientacyjne. Nie są gwarantowanym, aktualnym planem lotu.
-
-Wersję 7.0 przetestowano składniowo oraz na symulowanych odpowiedziach API i symulacji interakcji z formularzem. Nie wykonano testu na produkcyjnym Cloudflare.
+Uwaga: trasy i zdjęcia są nadal uzależnione od dostępności zewnętrznych serwisów. Żadna z użytych otwartych baz nie gwarantuje zgodności z bieżącymi lotami Flightradar24.
