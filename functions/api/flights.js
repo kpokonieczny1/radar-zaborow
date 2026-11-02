@@ -1,8 +1,8 @@
-// Radar Zaborów 6.0 · Cloudflare Pages Function
-// Współrzędne: 52°15′46,6″ N, 20°41′09,9″ E
-// ?radius=20&mode=positions -> szybkie pozycje, bez odpytywania baz zdjęć/tras
-// ?radius=20&mode=full      -> pozycje + metadane, odpytywane rzadziej przez przeglądarkę
-const HOME = Object.freeze({ lat: 52.2629444444, lon: 20.6860833333 });
+// Radar Zaborów 7.0 · Cloudflare Pages Function
+// ?lat=52.26294444&lon=20.68608333&radius=20&mode=positions
+// ?lat=52.26294444&lon=20.68608333&radius=20&mode=full
+// Domyślny środek: Zaborów, 52°15′46,6″ N, 20°41′09,9″ E.
+const DEFAULT_CENTER = Object.freeze({ lat: 52.2629444444, lon: 20.6860833333 });
 const MAX_DETAILS = 15;
 const HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -10,9 +10,9 @@ const HEADERS = {
   'x-content-type-options': 'nosniff',
 };
 const PROVIDERS = [
-  km => ({ name: 'ADSB One', url: `https://api.adsb.one/v2/point/${HOME.lat}/${HOME.lon}/${Math.ceil(km / 1.852) + 1}` }),
-  km => ({ name: 'ADSB.lol', url: `https://api.adsb.lol/v2/point/${HOME.lat}/${HOME.lon}/${Math.ceil(km / 1.852) + 1}` }),
-  km => ({ name: 'ADSB.fi', url: `https://opendata.adsb.fi/api/v3/lat/${HOME.lat}/lon/${HOME.lon}/dist/${Math.ceil(km / 1.852) + 1}` }),
+  (km, center) => ({ name: 'ADSB One', url: `https://api.adsb.one/v2/point/${center.lat}/${center.lon}/${Math.ceil(km / 1.852) + 1}` }),
+  (km, center) => ({ name: 'ADSB.lol', url: `https://api.adsb.lol/v2/point/${center.lat}/${center.lon}/${Math.ceil(km / 1.852) + 1}` }),
+  (km, center) => ({ name: 'ADSB.fi', url: `https://opendata.adsb.fi/api/v3/lat/${center.lat}/lon/${center.lon}/dist/${Math.ceil(km / 1.852) + 1}` }),
 ];
 const AIRLINES = {
   LOT: ['LOT Polish Airlines', 'LO'], RYR: ['Ryanair', 'FR'], WZZ: ['Wizz Air', 'W6'],
@@ -32,7 +32,7 @@ function kmBetween(aLat, aLon, bLat, bLon) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin(dLon / 2) ** 2;
   return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
-function distanceHome(lat, lon) { return kmBetween(HOME.lat, HOME.lon, lat, lon); }
+function distanceFromCenter(lat, lon, center) { return kmBetween(center.lat, center.lon, lat, lon); }
 function bearing(aLat, aLon, bLat, bLon) {
   const r = Math.PI / 180, dLon = (bLon - aLon) * r;
   const y = Math.sin(dLon) * Math.cos(bLat * r);
@@ -50,10 +50,10 @@ async function jsonFetch(url, options = {}, timeout = 5000) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
-async function firstPositions(km) {
+async function firstPositions(km, center) {
   const errors = [];
   for (const makeProvider of PROVIDERS) {
-    const provider = makeProvider(km);
+    const provider = makeProvider(km, center);
     try {
       const result = await jsonFetch(provider.url, {}, 4500);
       const list = Array.isArray(result?.ac) ? result.ac : result?.aircraft;
@@ -70,7 +70,7 @@ async function cachedJson(context, key, ttlSeconds, load) {
   try {
     if (typeof caches !== 'undefined' && caches.default) {
       cache = caches.default;
-      request = new Request(new URL('/__radar_cache_v6/' + encodeURIComponent(key), context.request.url));
+      request = new Request(new URL('/__radar_cache_v7/' + encodeURIComponent(key), context.request.url));
       const saved = await cache.match(request);
       if (saved) return saved.json();
     }
@@ -86,7 +86,7 @@ async function cachedJson(context, key, ttlSeconds, load) {
   return value;
 }
 
-function normalizeAircraft(raw) {
+function normalizeAircraft(raw, center) {
   const lat = num(raw?.lat), lon = num(raw?.lon);
   if (lat === null || lon === null) return null;
   const callsign = clean(raw.flight).toUpperCase();
@@ -96,7 +96,7 @@ function normalizeAircraft(raw) {
     hex, flight: callsign || null, registration: clean(raw.r) || null,
     model: clean(raw.t) || null, operator: airline?.[0] || clean(raw.ownOp) || null,
     airline_iata: airline?.[1] || null,
-    lat, lon, km: Math.round(distanceHome(lat, lon) * 10) / 10,
+    lat, lon, km: Math.round(distanceFromCenter(lat, lon, center) * 10) / 10,
     altitude_m: num(raw.alt_baro) === null ? null : Math.round(raw.alt_baro * 0.3048),
     speed_kmh: num(raw.gs) === null ? null : Math.round(raw.gs * 1.852),
     track: num(raw.track), vertical_fpm: num(raw.baro_rate) ?? num(raw.geom_rate),
@@ -292,16 +292,26 @@ export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const rawRadius = url.searchParams.get('radius') ?? '10';
   const radius = Number(rawRadius);
+  const rawLat = url.searchParams.get('lat') ?? String(DEFAULT_CENTER.lat);
+  const rawLon = url.searchParams.get('lon') ?? String(DEFAULT_CENTER.lon);
   const mode = url.searchParams.get('mode') === 'full' ? 'full' : 'positions';
   if (!/^\d+(?:\.\d{1,2})?$/.test(rawRadius) || !Number.isFinite(radius)
       || radius < 1 || radius > 200) {
     return new Response(JSON.stringify({ error: 'Promień musi wynosić od 1 do 200 km.' }),
       { status: 400, headers: HEADERS });
   }
+  const decimal = /^[-+]?\d+(?:\.\d{1,10})?$/;
+  const lat = Number(rawLat), lon = Number(rawLon);
+  if (!decimal.test(rawLat) || !decimal.test(rawLon) || !Number.isFinite(lat)
+      || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return new Response(JSON.stringify({ error: 'Nieprawidłowe współrzędne. Szerokość: -90…90°, długość: -180…180°.' }),
+      { status: 400, headers: HEADERS });
+  }
+  const center = { lat, lon };
   try {
     const effective = Math.max(radius, 10);
-    const raw = await firstPositions(effective);
-    const valid = raw.list.map(normalizeAircraft).filter(Boolean)
+    const raw = await firstPositions(effective, center);
+    const valid = raw.list.map(plane => normalizeAircraft(plane, center)).filter(Boolean)
       .filter(p => p.km <= effective).sort((a, b) => a.km - b.km);
     const flights = valid.filter(p => p.km <= radius);
     let output = flights;
@@ -313,7 +323,7 @@ export async function onRequestGet(context) {
     }
     return new Response(JSON.stringify({
       updated: new Date().toISOString(), source: raw.source, mode,
-      center: HOME, radius_km: radius, count: flights.length,
+      center, radius_km: radius, count: flights.length,
       inside_10km: valid.filter(p => p.km <= 10).length, flights: output,
     }), { status: 200, headers: HEADERS });
   } catch (error) {
