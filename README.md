@@ -1,40 +1,44 @@
-# Radar Zaborów 2.0 – wybór 10 / 20 / 50 km i alarm
+# Radar Zaborów 4.0 — Cloudflare Pages
 
-Projekt dla istniejącej strony `https://radar-zaborow.pages.dev/`, publikowanej za pośrednictwem GitHub i Cloudflare Pages.
+Nowa wersja panelu dla tabletu. Ustawienia pozostają bez zmian:
+- Lokalizacja: 52.2629444444 N, 20.6860833333 E (52°15′46,6″ N; 20°41′09,9″ E).
+- Promień wpisywany ręcznie (1–200 km), zapamiętywany w przeglądarce.
+- Odświeżanie co 30 s bez samolotów; co 10 s, gdy w zasięgu pojawią się samoloty.
+- Pozycja, odległość, wysokość i prędkość z sieci ADS-B.
+- Modele/rejestracje/przewoźnicy z ADSBdb, nazwy linii i logo jeżeli dostępne.
+- Zdjęcia z Planespotters.net (przez bufor ADSB.lol, zapasowo bezpośrednio),
+  a w razie braku z danych ADSBdb/airport-data.com. Autor/źródło pod zdjęciem.
+- Alarm, powiadomienia i dźwięki są całkowicie wyłączone i usunięte z interfejsu.
+- Trasy: preferowane API routeset ADSB.lol, tylko odpowiedzi oznaczone jako
+  prawdopodobne i zgodne z prostymi kontrolami geograficznymi; przy braku
+  potwierdzenia — „Trasa niepotwierdzona”.
 
-## Zmiany
+## Aktualizacja w GitHub
 
-- Wybór promienia: 10 km, 20 km lub 50 km.
-- Lista lotów i pozycje na radarze zmieniają się zgodnie z wybranym promieniem.
-- Strefa 10 km jest oznaczona zielonym okręgiem, niezależnie od wybranego zasięgu.
-- Przycisk „Włącz alarm 10 km”: widoczny komunikat, krótki dźwięk (jeśli przeglądarka zezwala) oraz powiadomienie systemowe, jeśli jest dostępne i użytkownik udzieli uprawnień.
-- Alarm dotyczy nowego samolotu wykrytego w promieniu 10 km od przybliżonego środka Zaborowa. Przy pierwszym odczycie następuje tylko ustalenie stanu początkowego; alert pojawia się przy kolejnym nowym wykryciu. Ten sam samolot nie generuje kolejnego alarmu przez co najmniej 15 minut.
-- Automatyczne odświeżanie co 30 sekund, kiedy karta jest widoczna.
+W repozytorium https://github.com/kpokonieczny1/radar-zaborow
+podmień dwa pliki, zachowując ścieżki:
 
-## Jak wgrać do istniejącego projektu
+1. `index.html` — główny katalog repozytorium.
+2. `functions/api/flights.js` — podkatalog `functions/api`.
 
-W repozytorium `kpokonieczny1/radar-zaborow` podmień **dwa pliki** (nie twórz drugiego repozytorium):
+Na GitHubie otwórz plik, kliknij ołówek, wklej kod z nowego pliku i
+kliknij „Commit changes”. Zrób tak dla obu plików.
+Cloudflare Pages powinien automatycznie opublikować wersję na
+https://radar-zaborow.pages.dev/.
 
-1. `index.html` w głównym katalogu repozytorium.
-2. `functions/api/flights.js` w odpowiednim katalogu.
+Po „Success” na Cloudflare odśwież stronę na tablecie (ew. Ctrl+F5 w PC).
+Dodatkowy podgląd danych: https://radar-zaborow.pages.dev/api/flights?radius=30
 
-Dla każdego pliku na GitHubie: otwórz plik, kliknij ołówek (Edit this file), zastąp całą treść nową, a następnie kliknij Commit changes.
+## Ograniczenia
 
-Cloudflare Pages wykryje commity i opublikuje nową wersję na tym samym adresie.
-
-## Test
-
-- `https://radar-zaborow.pages.dev/api/flights?radius=10`
-- `https://radar-zaborow.pages.dev/api/flights?radius=20`
-- `https://radar-zaborow.pages.dev/api/flights?radius=50`
-
-W JSON-ie sprawdź `radius_km`, `count`, `inside_10km` i `flights`.
-
-## Ważne ograniczenia
-
-- Tablet musi mieć aktywną kartę strony i połączenie z internetem. Nie jest to niezawodny system powiadamiania w tle lub przy wygaszonym ekranie.
-- Dane ADS-B są przybliżone i nie obejmują każdego samolotu. Nie wszystkie loty mają rozpoznaną linię i trasę.
-- Najbliższych 12 samolotów w jednym odczycie wzbogacamy zapytaniami do baz ADSBdb / hexdb.io; pozostałe wyświetlają dane dostępne bezpośrednio z ADS-B.
-- Na większym zasięgu dostawca może zastosować ograniczenia API. Radar próbuje ADSB One, ADSB.lol i ADSB.fi.
-- Promień jest mierzony poziomo od współrzędnych 52.2634, 20.6845, a nie od dokładnego adresu domu.
-- Projekt wymaga Cloudflare Pages Functions, nie działa w pełni na samym GitHub Pages.
+- Nie ma gwarancji dostępności fotografii dla każdego samolotu, także w przypadku
+  prawidłowego działania API. Zapasowe zdjęcia pojawiają się tylko wtedy,
+  gdy posiada je ADSBdb.
+- Trasy nie są bieżącymi planami lotu. Jeśli nie da się ich wiarygodnie określić,
+  nie są wyświetlane. Nie należy wnioskować skąd/dokąd tylko na podstawie bliskości lotniska.
+- Dla ochrony bezpłatnych limitów usług rozszerzone metadane są pobierane dla
+  maksymalnie 10 najbliższych samolotów w wybranym zasięgu. Pozostałe pozycje
+  pojawiają się na radarze, ale mogą nie mieć zdjęć ani trasy.
+- API Planespotters.net, ADSB.lol i ADSBdb mogą mieć limity lub przerwy.
+- Projekt sprawdzono składniowo i na symulowanych odpowiedziach API.
+  Własnego wdrożenia na Cloudflare nie testowano.
