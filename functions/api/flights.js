@@ -1,4 +1,4 @@
-// Radar Zaborów 7.0 · Cloudflare Pages Function
+// Radar Zaborów 9.0 · Cloudflare Pages Function
 // ?lat=52.26294444&lon=20.68608333&radius=20&mode=positions
 // ?lat=52.26294444&lon=20.68608333&radius=20&mode=full
 // Domyślny środek: Zaborów, 52°15′46,6″ N, 20°41′09,9″ E.
@@ -20,9 +20,6 @@ const AIRLINES = {
   AFR: ['Air France', 'AF'], UAE: ['Emirates', 'EK'], THY: ['Turkish Airlines', 'TK'],
   SAS: ['Scandinavian Airlines', 'SK'], EZY: ['easyJet', 'U2'], ENT: ['Enter Air', 'E4'],
 };
-const AIRPORT_COORDS = {
-  WAW: [52.1657, 20.9671], WMI: [52.4511, 20.6517], KRK: [50.0777, 19.7848],
-};
 const num = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const clean = value => typeof value === 'string' ? value.trim() : '';
 
@@ -33,14 +30,6 @@ function kmBetween(aLat, aLon, bLat, bLon) {
   return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 function distanceFromCenter(lat, lon, center) { return kmBetween(center.lat, center.lon, lat, lon); }
-function bearing(aLat, aLon, bLat, bLon) {
-  const r = Math.PI / 180, dLon = (bLon - aLon) * r;
-  const y = Math.sin(dLon) * Math.cos(bLat * r);
-  const x = Math.cos(aLat * r) * Math.sin(bLat * r) - Math.sin(aLat * r) * Math.cos(bLat * r) * Math.cos(dLon);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-function angleDifference(a, b) { return Math.abs(((a - b + 540) % 360) - 180); }
-
 async function jsonFetch(url, options = {}, timeout = 5000) {
   const response = await fetch(url, {
     ...options,
@@ -70,7 +59,7 @@ async function cachedJson(context, key, ttlSeconds, load) {
   try {
     if (typeof caches !== 'undefined' && caches.default) {
       cache = caches.default;
-      request = new Request(new URL('/__radar_cache_v7/' + encodeURIComponent(key), context.request.url));
+      request = new Request(new URL('/__radar_cache_v9/' + encodeURIComponent(key), context.request.url));
       const saved = await cache.match(request);
       if (saved) return saved.json();
     }
@@ -99,17 +88,53 @@ function normalizeAircraft(raw, center) {
     lat, lon, km: Math.round(distanceFromCenter(lat, lon, center) * 10) / 10,
     altitude_m: num(raw.alt_baro) === null ? null : Math.round(raw.alt_baro * 0.3048),
     speed_kmh: num(raw.gs) === null ? null : Math.round(raw.gs * 1.852),
-    track: num(raw.track), vertical_fpm: num(raw.baro_rate) ?? num(raw.geom_rate),
+    track: num(raw.track),
   };
+}
+// ISO 3166-1 alpha-2 -> alpha-3. Kraje pochodzą ze źródeł lotniczych;
+// nie wnioskujemy kraju z samego prefiksu ICAO lotniska.
+const ISO2_TO_ISO3 = Object.freeze({
+  AD:'AND', AE:'ARE', AF:'AFG', AG:'ATG', AI:'AIA', AL:'ALB', AM:'ARM', AO:'AGO', AQ:'ATA', AR:'ARG',
+  AS:'ASM', AT:'AUT', AU:'AUS', AW:'ABW', AX:'ALA', AZ:'AZE', BA:'BIH', BB:'BRB', BD:'BGD', BE:'BEL',
+  BF:'BFA', BG:'BGR', BH:'BHR', BI:'BDI', BJ:'BEN', BL:'BLM', BM:'BMU', BN:'BRN', BO:'BOL', BQ:'BES',
+  BR:'BRA', BS:'BHS', BT:'BTN', BV:'BVT', BW:'BWA', BY:'BLR', BZ:'BLZ', CA:'CAN', CC:'CCK', CD:'COD',
+  CF:'CAF', CG:'COG', CH:'CHE', CI:'CIV', CK:'COK', CL:'CHL', CM:'CMR', CN:'CHN', CO:'COL', CR:'CRI',
+  CU:'CUB', CV:'CPV', CW:'CUW', CX:'CXR', CY:'CYP', CZ:'CZE', DE:'DEU', DJ:'DJI', DK:'DNK', DM:'DMA',
+  DO:'DOM', DZ:'DZA', EC:'ECU', EE:'EST', EG:'EGY', EH:'ESH', ER:'ERI', ES:'ESP', ET:'ETH', FI:'FIN',
+  FJ:'FJI', FK:'FLK', FM:'FSM', FO:'FRO', FR:'FRA', GA:'GAB', GB:'GBR', GD:'GRD', GE:'GEO', GF:'GUF',
+  GG:'GGY', GH:'GHA', GI:'GIB', GL:'GRL', GM:'GMB', GN:'GIN', GP:'GLP', GQ:'GNQ', GR:'GRC', GS:'SGS',
+  GT:'GTM', GU:'GUM', GW:'GNB', GY:'GUY', HK:'HKG', HM:'HMD', HN:'HND', HR:'HRV', HT:'HTI', HU:'HUN',
+  ID:'IDN', IE:'IRL', IL:'ISR', IM:'IMN', IN:'IND', IO:'IOT', IQ:'IRQ', IR:'IRN', IS:'ISL', IT:'ITA',
+  JE:'JEY', JM:'JAM', JO:'JOR', JP:'JPN', KE:'KEN', KG:'KGZ', KH:'KHM', KI:'KIR', KM:'COM', KN:'KNA',
+  KP:'PRK', KR:'KOR', KW:'KWT', KY:'CYM', KZ:'KAZ', LA:'LAO', LB:'LBN', LC:'LCA', LI:'LIE', LK:'LKA',
+  LR:'LBR', LS:'LSO', LT:'LTU', LU:'LUX', LV:'LVA', LY:'LBY', MA:'MAR', MC:'MCO', MD:'MDA', ME:'MNE',
+  MF:'MAF', MG:'MDG', MH:'MHL', MK:'MKD', ML:'MLI', MM:'MMR', MN:'MNG', MO:'MAC', MP:'MNP', MQ:'MTQ',
+  MR:'MRT', MS:'MSR', MT:'MLT', MU:'MUS', MV:'MDV', MW:'MWI', MX:'MEX', MY:'MYS', MZ:'MOZ', NA:'NAM',
+  NC:'NCL', NE:'NER', NF:'NFK', NG:'NGA', NI:'NIC', NL:'NLD', NO:'NOR', NP:'NPL', NR:'NRU', NU:'NIU',
+  NZ:'NZL', OM:'OMN', PA:'PAN', PE:'PER', PF:'PYF', PG:'PNG', PH:'PHL', PK:'PAK', PL:'POL', PM:'SPM',
+  PN:'PCN', PR:'PRI', PS:'PSE', PT:'PRT', PW:'PLW', PY:'PRY', QA:'QAT', RE:'REU', RO:'ROU', RS:'SRB',
+  RU:'RUS', RW:'RWA', SA:'SAU', SB:'SLB', SC:'SYC', SD:'SDN', SE:'SWE', SG:'SGP', SH:'SHN', SI:'SVN',
+  SJ:'SJM', SK:'SVK', SL:'SLE', SM:'SMR', SN:'SEN', SO:'SOM', SR:'SUR', SS:'SSD', ST:'STP', SV:'SLV',
+  SX:'SXM', SY:'SYR', SZ:'SWZ', TC:'TCA', TD:'TCD', TF:'ATF', TG:'TGO', TH:'THA', TJ:'TJK', TK:'TKL',
+  TL:'TLS', TM:'TKM', TN:'TUN', TO:'TON', TR:'TUR', TT:'TTO', TV:'TUV', TW:'TWN', TZ:'TZA', UA:'UKR',
+  UG:'UGA', UM:'UMI', US:'USA', UY:'URY', UZ:'UZB', VA:'VAT', VC:'VCT', VE:'VEN', VG:'VGB', VI:'VIR',
+  VN:'VNM', VU:'VUT', WF:'WLF', WS:'WSM', YE:'YEM', YT:'MYT', ZA:'ZAF', ZM:'ZMB', ZW:'ZWE',
+});
+function airportCountryISO3(value) {
+  if (!value || typeof value !== 'object') return null;
+  const raw = clean(value.countryiso2 || value.country_iso_name || value.country_code
+    || value.iso_country || value.country_iso || value.country_iso2 || value.countryCode
+    || value.country_iso3 || '').toUpperCase();
+  if (/^[A-Z]{2}$/.test(raw)) return ISO2_TO_ISO3[raw] || null;
+  if (/^[A-Z]{3}$/.test(raw) && Object.values(ISO2_TO_ISO3).includes(raw)) return raw;
+  return null;
 }
 function airport(value) {
   if (!value || typeof value !== 'object') return null;
   const code = clean(value.iata_code || value.iata || value.icao_code || value.icao).toUpperCase();
-  const coords = AIRPORT_COORDS[code];
   return {
     code: code || null, name: clean(value.name || value.location || value.municipality) || null,
-    lat: num(value.lat) ?? num(value.latitude) ?? coords?.[0] ?? null,
-    lon: num(value.lon) ?? num(value.longitude) ?? coords?.[1] ?? null,
+    country_iso3: airportCountryISO3(value),
   };
 }
 function buildRoute(from, to, source, plausible = false) {
@@ -118,9 +143,20 @@ function buildRoute(from, to, source, plausible = false) {
   return { from: start, to: end, source, plausible };
 }
 function routeFromLol(row) {
-  const airports = row?._airports;
-  if (!Array.isArray(airports) || airports.length < 2) return null;
-  return buildRoute(airports[0], airports[airports.length - 1], 'ADSB.lol', row.plausible === true);
+  if (!row || typeof row !== 'object') return null;
+  const airports = Array.isArray(row._airports) ? row._airports : row.airports;
+  if (Array.isArray(airports) && airports.length >= 2) {
+    return buildRoute(airports[0], airports[airports.length - 1], 'ADSB.lol', row.plausible === true);
+  }
+  // W części odpowiedzi dostawca zwraca tylko lotniska jako "WAW-LHR".
+  // Nie wyprowadzamy z samych kodów żadnych nazw ani krajów.
+  const codes = clean(row._airport_codes_iata || row.airport_codes || row._airport_codes || '');
+  const pieces = codes.split('-').map(value => value.trim()).filter(Boolean);
+  if (pieces.length >= 2 && pieces.every(value => /^[A-Z]{3,4}$/i.test(value))) {
+    return buildRoute({ iata: pieces[0] }, { iata: pieces[pieces.length - 1] },
+      'ADSB.lol', row.plausible === true);
+  }
+  return null;
 }
 function routeFromDb(value) {
   return buildRoute(value?.origin, value?.destination, 'ADSBdb');
@@ -129,62 +165,20 @@ function routeFromHexdb(value) {
   return buildRoute(value?.origin || value?.from, value?.destination || value?.to, 'HexDB');
 }
 
-// ADS-B nie przenosi tras. Ocena jakości nie jest potwierdzeniem planu lotu.
-// Przy niskim locie nad Zaborowem wymagamy powiązania z pobliskim lotniskiem.
-function routeScore(route, plane) {
-  if (!route) return -Infinity;
-  const point = a => num(a.lat) !== null && num(a.lon) !== null
-    ? kmBetween(plane.lat, plane.lon, a.lat, a.lon) : null;
-  const start = point(route.from), end = point(route.to);
-  const altitude = plane.altitude_m;
-  const low = altitude !== null && altitude < 5000;
-  const knownDistances = [start, end].filter(d => d !== null);
-  if (low && (!knownDistances.length || Math.min(...knownDistances) > 110)) return -Infinity;
-  let score = route.plausible ? 3 : 0;
-  if (route.source === 'ADSB.lol') score += 1;
-  if (knownDistances.length) {
-    const nearby = Math.min(...knownDistances);
-    if (nearby <= 35) score += 5;
-    else if (nearby <= 65) score += 3;
-    else if (nearby <= 110) score += 1;
-  }
-  const climb = plane.vertical_fpm;
-  if (low && climb !== null && Math.abs(climb) > 200 && start !== null && end !== null) {
-    const departure = climb > 0;
-    const nearExpected = departure ? start : end;
-    const nearUnexpected = departure ? end : start;
-    if (nearExpected < 70) score += 4;
-    if (nearUnexpected < 45 && nearExpected > 110) return -Infinity;
-    if (plane.track !== null && nearExpected < 90) {
-      const field = departure ? route.from : route.to;
-      const expectedTrack = departure
-        ? bearing(field.lat, field.lon, plane.lat, plane.lon)
-        : bearing(plane.lat, plane.lon, field.lat, field.lon);
-      const diff = angleDifference(plane.track, expectedTrack);
-      if (diff < 65) score += 2;
-      else if (diff > 145 && nearExpected > 12) score -= 2;
-    }
-  }
-  // Na dużej wysokości pojedyncza niepotwierdzona trasa jest zbyt słabym dowodem.
-  if (!low && !route.plausible) score -= 2;
-  return score;
-}
-function pickRoute(candidates, plane) {
-  const scored = candidates.filter(Boolean).map(route => ({ route, score: routeScore(route, plane) }))
-    .filter(x => Number.isFinite(x.score)).sort((a, b) => b.score - a.score);
-  if (!scored.length) return null;
-  const best = scored[0];
-  const matches = scored.filter(x => x.route.from.code === best.route.from.code
-    && x.route.to.code === best.route.to.code).length;
-  if (matches > 1) best.score += 3;
-  // Konflikt dwóch podobnie wiarygodnych tras: nie zgaduj celu podróży.
-  const conflict = scored.find(x => (x.route.from.code !== best.route.from.code
-    || x.route.to.code !== best.route.to.code) && x.score >= best.score - 1.5);
-  if (conflict && matches < 2) return null;
-  if (best.score < 4) return null;
-  return { from: best.route.from, to: best.route.to,
-    route_status: matches > 1 || best.route.plausible ? 'prawdopodobna' : 'orientacyjna',
-    route_source: best.route.source };
+// Trasy NIE są przesyłane przez ADS-B. Wyświetlamy nieprzefiltrowaną
+// propozycję z pierwszej bazy, która podaje oba lotniska; bez oceniania
+// jej zgodności z pozycją, wysokością, kierunkiem czy plausible=false.
+// Kolejność: ADSB.lol → ADSBdb → HexDB. Oznaczenie źródła jest obowiązkowe.
+function pickRoute(candidates) {
+  const route = candidates.find(Boolean);
+  if (!route) return null;
+  return {
+    from: route.from,
+    to: route.to,
+    route_source: route.source,
+    route_status: 'z bazy – niezweryfikowana',
+    route_plausible: route.plausible === true,
+  };
 }
 
 function allowedUrl(value, domains) {
@@ -247,13 +241,15 @@ async function enrich(plane, lol, context) {
       dbRoute = raw?.response?.flightroute || null;
     } catch { /* brak */ }
   }
-  if (!lol && !dbRoute && /^[A-Z0-9]{3,10}$/.test(callsign)) {
+  // HexDB odpytujemy, jeżeli ani ADSB.lol, ani ADSBdb nie podają pełnej trasy.
+  const availableRoute = routeFromLol(lol) || routeFromDb(dbRoute);
+  if (!availableRoute && /^[A-Z0-9]{3,10}$/.test(callsign)) {
     try {
       rawHexdb = await cachedJson(context, `hex-route:${callsign}`, 1200,
         () => jsonFetch(`https://hexdb.io/api/v2/routes/${encodeURIComponent(callsign)}`, {}, 3500));
     } catch { /* brak */ }
   }
-  const route = pickRoute([routeFromLol(lol), routeFromDb(dbRoute), routeFromHexdb(rawHexdb)], plane);
+  const route = pickRoute([availableRoute, routeFromHexdb(rawHexdb)]);
   const iata = clean(dbRoute?.airline?.iata).toUpperCase();
   const photoDb = photoFromDb(dbPlane);
   let photo = null;
@@ -284,6 +280,7 @@ async function enrich(plane, lol, context) {
     airline_iata: caller?.[1] || (/^[A-Z0-9]{2}$/.test(iata) ? iata : plane.airline_iata),
     from: route?.from || null, to: route?.to || null,
     route_status: route?.route_status || null, route_source: route?.route_source || null,
+    route_plausible: route?.route_plausible ?? null,
     photo: photo || photoDb, photo_fallback: photo && photoDb ? photoDb : null,
   };
 }
