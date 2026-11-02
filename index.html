@@ -1,14 +1,303 @@
-<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1525"><title>Radar Zaborów · 10 km</title><style>
-:root{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#f0f5ff;background:#0b1525}*{box-sizing:border-box}body{margin:0;padding:22px;max-width:1380px;margin-inline:auto}h1{margin:0;font-size:clamp(22px,3.3vw,35px)}.sub{color:#a4b5ce;margin:6px 0 0}.head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}.pill{border:1px solid #33506d;border-radius:100px;padding:10px 16px;background:#13263c;font-size:14px}.layout{display:grid;grid-template-columns:minmax(270px,0.8fr) minmax(400px,1.5fr);gap:20px}.panel{border:1px solid #2c435d;background:#111f33;border-radius:19px;padding:20px}.radar{width:100%;aspect-ratio:1;max-height:490px}.radar circle.ring{fill:none;stroke:#315779;stroke-width:1}.radar line{stroke:#294763;stroke-width:1}.radar .dot{fill:#72e6cb;stroke:#d9fff4;stroke-width:1}.radar text{font-size:11px;fill:#89a4bf}.meta{display:flex;justify-content:space-between;color:#9fb4cb;font-size:13px;margin-top:5px}.sectionHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}h2{font-size:20px;margin:0}button{cursor:pointer;background:#226d9d;border:0;color:white;font:inherit;padding:9px 13px;border-radius:10px}button:hover{background:#2e83bb}.flight{border:1px solid #29425d;border-radius:13px;background:#15283f;padding:15px;margin-bottom:12px}.flightTop{display:flex;justify-content:space-between;gap:10px;margin-bottom:11px}.flightTop strong{font-size:18px}.dist{font-size:13px;color:#77e2ce}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.label{display:block;font-size:12px;color:#92aac6;margin-bottom:4px}.value{font-size:15px;overflow-wrap:anywhere}.empty{padding:40px 10px;text-align:center;color:#b0c5de}.foot{margin-top:18px;color:#849bb5;font-size:12px;line-height:1.6}.foot a{color:#84d5ff}#status.bad{color:#ffb0a8}@media(max-width:850px){body{padding:12px}.layout{grid-template-columns:1fr}.radar{max-height:360px}.panel{padding:14px}}@media(min-width:900px){.layout{align-items:start}} </style></head><body>
-<div class="head"><div><h1>✈ Radar Zaborów</h1><p class="sub">Samoloty w promieniu 10 km · centrum miejscowości Zaborów</p></div><div class="pill" id="status">Łączenie z radarem…</div></div>
-<div class="layout"><section class="panel"><div class="sectionHead"><h2>Pozycje</h2><span id="count" class="pill">—</span></div><svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Radar z samolotami wokół Zaborowa"><circle cx="200" cy="200" r="178" fill="#102a38"/><circle class="ring" cx="200" cy="200" r="89"/><circle class="ring" cx="200" cy="200" r="178"/><line x1="200" y1="22" x2="200" y2="378"/><line x1="22" y1="200" x2="378" y2="200"/><text x="205" y="18">N</text><text x="205" y="35">10 km</text><circle cx="200" cy="200" r="5" fill="#f8c56f"/><text x="210" y="214">Zaborów</text><g id="dots"></g></svg><div class="meta"><span>Promień: 10 km (poziomo)</span><span id="time">—</span></div></section>
-<section class="panel"><div class="sectionHead"><h2>Aktualne loty</h2><button id="refresh">Odśwież</button></div><div id="flights" aria-live="polite"><div class="empty">Pobieranie danych…</div></div></section></div>
-<div class="foot">Odświeżanie automatyczne co 30 sekund. Dane pozycyjne: <a href="https://adsb.fi" target="_blank" rel="noreferrer">adsb.fi</a>. Dane identyfikacyjne i trasy: <a href="https://adsbdb.com" target="_blank" rel="noreferrer">ADSBdb</a>. Nie wszystkie maszyny są wykrywane, a trasy z bazy mogą być niepełne lub nieaktualne.</div>
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1525">
+  <title>Radar Zaborów · samoloty na żywo</title>
+  <style>
+    :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
+    *{box-sizing:border-box}
+    body{margin:0 auto;padding:20px;max-width:1440px}
+    h1{margin:0;font-size:clamp(25px,3.2vw,36px)}
+    h2{font-size:19px;margin:0}
+    .sub,.muted{color:#a8bdd2}
+    .sub{margin:5px 0 0;font-size:14px}
+    .header{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;border:1px solid #395575;border-radius:50px;padding:9px 13px;background:#13263c;font-size:13px}
+    .pill.bad{color:#ffaaa6;border-color:#895352}
+    .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#122238;border:1px solid #2e4764;border-radius:16px;padding:12px 15px;margin-bottom:16px}
+    .controls .name{color:#bbd4eb;font-size:14px;font-weight:600}
+    .segmented{display:inline-flex;gap:4px;padding:3px;border:1px solid #395575;border-radius:11px;background:#0c192b}
+    button{cursor:pointer;background:#276f9f;border:1px solid transparent;color:white;font:inherit;padding:9px 14px;border-radius:10px;min-height:41px}
+    button:hover{background:#3784bb}
+    button:focus-visible{outline:3px solid #97dbff;outline-offset:2px}
+    .segmented button{min-width:67px;background:transparent;color:#bcd1e6}
+    .segmented button[aria-pressed="true"]{background:#2f82ba;color:white;font-weight:700}
+    #alertToggle{background:#1b344b;border-color:#47617c}
+    #alertToggle[aria-pressed="true"]{background:#234c3c;border-color:#4ca980}
+    .controls .hint{font-size:12px;color:#9cb2cc}
+    .layout{display:grid;grid-template-columns:minmax(290px,0.85fr) minmax(420px,1.5fr);gap:17px;align-items:start}
+    .panel{border:1px solid #2c435d;background:#111f33;border-radius:18px;padding:19px;min-width:0}
+    .sectionHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .radar{display:block;width:100%;max-width:520px;margin:0 auto;aspect-ratio:1}
+    .radar .ring{fill:none;stroke:#315779;stroke-width:1.2}
+    .radar .zone{fill:#267457;fill-opacity:.12;stroke:#4caa8e;stroke-width:1.6;stroke-dasharray:5 4}
+    .radar .axis{stroke:#294763;stroke-width:1}
+    .radar .dot{fill:#70baff;stroke:#d9f1ff;stroke-width:1.2}
+    .radar .dot.near{fill:#65e4ac;stroke:#d9fff4}
+    .radar text{font-size:11px;fill:#a5c4dc}
+    .radar .planeLabel{font-size:12px;fill:#e9f7ff;paint-order:stroke;stroke:#102a38;stroke-width:3px;stroke-linejoin:round}
+    .meta{display:flex;justify-content:space-between;gap:10px;color:#a7bdd1;font-size:12px;flex-wrap:wrap;margin-top:4px}
+    .stats{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+    .stat{background:#162b41;border-radius:10px;padding:10px 13px;flex:1;min-width:105px}
+    .stat strong{font-size:24px;display:block;color:#e5f3ff}
+    .stat span{font-size:12px;color:#a4bfdb}
+    .flight{border:1px solid #29425d;border-radius:13px;background:#15283f;padding:13px 14px;margin:0 0 11px}
+    .flightTop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+    .flightTop strong{font-size:17px}
+    .dist{font-size:13px;color:#a9d6ff;white-space:nowrap}
+    .dist.near{color:#6de7ac;font-weight:700}
+    .fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+    .label{display:block;font-size:12px;color:#92aac6;margin-bottom:2px}
+    .value{font-size:14px;overflow-wrap:anywhere}
+    .empty{padding:38px 8px;text-align:center;color:#bed1e6}
+    .notice{padding:12px 15px;border-radius:12px;background:#204538;border:1px solid #4d9c77;margin-bottom:14px;display:none}
+    .notice.show{display:block}
+    .foot{color:#8da8c4;font-size:12px;line-height:1.65;margin-top:18px}
+    .foot a{color:#89d5ff}
+    @media (max-width:950px){body{padding:12px}.layout{grid-template-columns:1fr}.panel{padding:15px}.radar{max-width:430px}}
+    @media (max-width:480px){.controls{gap:8px}.fields{gap:11px}.segmented button{min-width:58px;padding:7px 9px}.panel{padding:12px}.flight{padding:12px}}
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>✈ Radar Zaborów</h1>
+      <p class="sub">Samoloty wokół Zaborowa · powiat warszawski zachodni</p>
+    </div>
+    <div class="pill" id="status" role="status">Łączenie z radarem…</div>
+  </header>
+
+  <nav class="controls" aria-label="Ustawienia radaru">
+    <span class="name">Zasięg</span>
+    <div class="segmented" role="group" aria-label="Promień radaru">
+      <button type="button" data-radius="10" aria-pressed="true">10 km</button>
+      <button type="button" data-radius="20" aria-pressed="false">20 km</button>
+      <button type="button" data-radius="50" aria-pressed="false">50 km</button>
+    </div>
+    <button type="button" id="alertToggle" aria-pressed="false">🔔 Włącz alarm 10 km</button>
+    <span class="hint">Alert przy nowym samolocie w strefie 10 km</span>
+  </nav>
+
+  <div id="notice" class="notice" role="alert"></div>
+
+  <main class="layout">
+    <section class="panel" aria-label="Radar pozycji">
+      <div class="sectionHead"><h2>Pozycje</h2><span class="pill" id="count">—</span></div>
+      <svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Pozycje samolotów wokół Zaborowa">
+        <circle cx="200" cy="200" r="178" fill="#102a38"/>
+        <circle class="zone" id="zone10" cx="200" cy="200" r="178"/>
+        <circle class="ring" id="ringHalf" cx="200" cy="200" r="89"/>
+        <circle class="ring" cx="200" cy="200" r="178"/>
+        <line class="axis" x1="200" y1="22" x2="200" y2="378"/>
+        <line class="axis" x1="22" y1="200" x2="378" y2="200"/>
+        <text x="205" y="18">N</text>
+        <text id="rangeLabel" x="205" y="35">10 km</text>
+        <circle cx="200" cy="200" r="5" fill="#f8c56f"/>
+        <text x="211" y="212">Zaborów</text>
+        <g id="dots"></g>
+      </svg>
+      <div class="stats">
+        <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
+        <div class="stat"><strong id="allCount">—</strong><span>W wybranym zasięgu</span></div>
+      </div>
+      <div class="meta"><span id="radiusInfo">Promień: 10 km (poziomo)</span><span id="time">—</span></div>
+    </section>
+    <section class="panel" aria-label="Lista lotów">
+      <div class="sectionHead"><h2>Aktualne loty</h2><button type="button" id="refresh">Odśwież</button></div>
+      <div id="flights" aria-live="polite"><div class="empty">Pobieranie danych…</div></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Odświeżanie co 30 sekund przy otwartej stronie. Alarm 10 km działa podczas jej aktywnej pracy;
+    na tablecie nie gwarantuje działania przy wygaszonym ekranie lub w tle.
+    Dane pozycyjne: <a href="https://adsb.one" target="_blank" rel="noreferrer">ADSB One</a>,
+    <a href="https://adsb.lol" target="_blank" rel="noreferrer">ADSB.lol</a>,
+    <a href="https://adsb.fi" target="_blank" rel="noreferrer">ADSB.fi</a>.
+    Identyfikacja i trasy: <a href="https://adsbdb.com" target="_blank" rel="noreferrer">ADSBdb</a>,
+    <a href="https://hexdb.io" target="_blank" rel="noreferrer">hexdb.io</a>.
+    Trasy są orientacyjne; powiadomienie może nie zadziałać, gdy samolot nie nadaje lub sygnał nie jest dostępny.
+  </footer>
+
 <script>
-const el=id=>document.getElementById(id);const safe=s=>String(s??'Brak danych').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let busy=false;let last=[];
-const field=(label,value)=>`<div><span class="label">${label}</span><div class="value">${safe(value)}</div></div>`;
-function render(data){last=data.flights||[];el('count').textContent=`${last.length} samolotów`;el('time').textContent='Stan: '+new Date(data.updated).toLocaleTimeString('pl-PL');el('flights').innerHTML=last.length?last.map(f=>`<div class="flight"><div class="flightTop"><strong>✈ ${safe(f.flight||f.registration||f.hex)}</strong><span class="dist">${safe(f.km)} km</span></div><div class="fields">${field('Samolot',f.model||f.registration||'Nieznany')}${field('Linia / operator',f.operator)}${field('Skąd',f.from?(f.from.code?f.from.code+' · ':'')+(f.from.name||''):null)}${field('Dokąd',f.to?(f.to.code?f.to.code+' · ':'')+(f.to.name||''):null)}${field('Wysokość',f.altitude_m==null?null:f.altitude_m+' m')}${field('Prędkość',f.speed_kmh==null?null:f.speed_kmh+' km/h')}</div></div>`).join(''):'<div class="empty">Brak wykrytych samolotów w promieniu 10 km.</div>';
-let dots='';for(const f of last){const dx=(f.lon-20.6845)*Math.cos(52.2634*Math.PI/180)*111.2,dy=(f.lat-52.2634)*111.2,x=200+dx/10*178,y=200-dy/10*178;if(Math.hypot(x-200,y-200)>178)continue;dots+=`<g><circle class="dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/><text x="${(x+8).toFixed(1)}" y="${(y-7).toFixed(1)}">${safe(f.flight||f.registration||'✈')}</text></g>`;}el('dots').innerHTML=dots;}
-async function update(){if(busy)return;busy=true;el('status').textContent='Aktualizacja…';try{const r=await fetch('/api/flights',{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Błąd API');render(d);el('status').textContent='● Radar działa';el('status').className='pill';}catch(e){el('status').textContent='⚠ Brak połączenia';el('status').className='pill bad';if(!last.length)el('flights').innerHTML=`<div class="empty">Nie udało się pobrać danych. ${safe(e.message)}<br>Spróbuj za chwilę.</div>`;}finally{busy=false;}}
-el('refresh').addEventListener('click',update);update();setInterval(()=>{if(!document.hidden)update()},30000);
-</script></body></html>
+'use strict';
+const LAT = 52.2634;
+const LON = 20.6845;
+const DEGREES = Math.PI / 180;
+const REFRESH_MS = 30000;
+const el = id => document.getElementById(id);
+const safe = value => String(value ?? 'Brak danych').replace(/[&<>"']/g,
+  ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+let radius = 10;
+let last = [];
+let updateNumber = 0;
+let controller = null;
+let alertEnabled = false;
+let baselineReady = false;
+let previousNear = new Set();
+const recentlyAlerted = new Map();
+let audioContext = null;
+let noticeTimer = null;
+
+function planeKey(f) {
+  return String(f.hex || f.flight || f.registration || '').trim().toUpperCase();
+}
+function field(label, value) {
+  return `<div><span class="label">${label}</span><div class="value">${safe(value)}</div></div>`;
+}
+function routeAirport(a) {
+  return a ? [a.code, a.name].filter(Boolean).join(' · ') || null : null;
+}
+function render(data) {
+  last = Array.isArray(data.flights) ? data.flights : [];
+  const near = last.filter(f => Number(f.km) <= 10);
+  el('count').textContent = `${last.length} samolotów`;
+  el('nearCount').textContent = String(near.length);
+  el('allCount').textContent = String(last.length);
+  el('time').textContent = 'Stan: ' + new Date(data.updated).toLocaleTimeString('pl-PL');
+  el('radiusInfo').textContent = `Promień: ${radius} km (poziomo)`;
+  el('rangeLabel').textContent = `${radius} km`;
+  el('zone10').setAttribute('r', String(178 * 10 / radius));
+  el('ringHalf').setAttribute('r', String(radius === 10 ? 89 : 178 * 10 / radius));
+  el('flights').innerHTML = last.length ? last.map(f => {
+    const close = Number(f.km) <= 10;
+    return `<article class="flight"><div class="flightTop"><strong>✈ ${safe(f.flight || f.registration || f.hex || 'Samolot')}</strong>
+      <span class="dist ${close ? 'near' : ''}">${safe(f.km)} km${close ? ' · strefa 10 km' : ''}</span></div>
+      <div class="fields">${field('Samolot',f.model || f.registration || 'Nieznany')}
+      ${field('Linia / operator',f.operator)}${field('Skąd',routeAirport(f.from))}
+      ${field('Dokąd',routeAirport(f.to))}${field('Wysokość',f.altitude_m == null ? null : f.altitude_m + ' m')}
+      ${field('Prędkość',f.speed_kmh == null ? null : f.speed_kmh + ' km/h')}</div></article>`;
+  }).join('') : `<div class="empty">Brak wykrytych samolotów w promieniu ${radius} km.</div>`;
+
+  let dots = '';
+  for (const f of last) {
+    if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
+    const dx = (f.lon - LON) * Math.cos(LAT * DEGREES) * 111.2;
+    const dy = (f.lat - LAT) * 111.2;
+    const x = 200 + dx / radius * 178;
+    const y = 200 - dy / radius * 178;
+    if (Math.hypot(x - 200, y - 200) > 178) continue;
+    const close = Number(f.km) <= 10;
+    dots += `<g><circle class="dot ${close ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
+      <text class="planeLabel" x="${(x + 8).toFixed(1)}" y="${(y - 7).toFixed(1)}">${safe(f.flight || f.registration || '✈')}</text></g>`;
+  }
+  el('dots').innerHTML = dots;
+}
+
+function showNotice(message) {
+  clearTimeout(noticeTimer);
+  el('notice').textContent = message;
+  el('notice').classList.add('show');
+  noticeTimer = setTimeout(() => el('notice').classList.remove('show'), 14000);
+}
+
+function beep() {
+  if (!audioContext) return;
+  try {
+    if (audioContext.state === 'suspended') audioContext.resume();
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 770;
+    gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.07, audioContext.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.24);
+    osc.connect(gain); gain.connect(audioContext.destination);
+    osc.start(); osc.stop(audioContext.currentTime + 0.25);
+  } catch { /* Dźwięk może być blokowany przez system tabletu. */ }
+}
+
+function checkEntrants(flights) {
+  const current = new Set();
+  const fresh = [];
+  const now = Date.now();
+  for (const f of flights) {
+    if (Number(f.km) > 10) continue;
+    const key = planeKey(f);
+    if (!key) continue;
+    current.add(key);
+    if (alertEnabled && baselineReady && !previousNear.has(key) &&
+      (!recentlyAlerted.has(key) || now - recentlyAlerted.get(key) > 15 * 60000)) {
+      fresh.push(f);
+      recentlyAlerted.set(key, now);
+    }
+  }
+  previousNear = current;
+  baselineReady = true;
+  for (const [key, time] of recentlyAlerted) {
+    if (now - time > 60 * 60000) recentlyAlerted.delete(key);
+  }
+  if (!alertEnabled || !fresh.length) return;
+  const names = fresh.slice(0, 3).map(f => f.flight || f.registration || f.hex || 'samolot');
+  const message = `✈ W strefie 10 km: ${names.join(', ')}${fresh.length > 3 ? ' i inne' : ''}`;
+  showNotice(message);
+  beep();
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('Radar Zaborów · samolot w odległości 10 km', { body: message, tag: 'radar-zaborow-10km' }); }
+    catch { /* Niektóre przeglądarki wymagają dodatkowych uprawnień. */ }
+  }
+}
+
+async function update() {
+  const currentRequest = ++updateNumber;
+  if (controller) controller.abort();
+  controller = new AbortController();
+  const selected = radius;
+  el('status').textContent = `Aktualizacja · ${selected} km…`;
+  try {
+    const r = await fetch(`/api/flights?radius=${selected}`, {cache:'no-store',signal:controller.signal});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || d.error || `HTTP ${r.status}`);
+    if (currentRequest !== updateNumber) return;
+    render(d);
+    checkEntrants(last);
+    el('status').textContent = `● Radar działa · ${d.source || 'API'}`;
+    el('status').className = 'pill';
+  } catch (error) {
+    if (currentRequest !== updateNumber || error.name === 'AbortError') return;
+    el('status').textContent = '⚠ Brak połączenia';
+    el('status').className = 'pill bad';
+    if (!last.length) el('flights').innerHTML = `<div class="empty">Nie udało się pobrać danych.<p>${safe(error.message)}</p>Spróbuj za chwilę.</div>`;
+  }
+}
+
+function setRadius(value) {
+  if (radius === value) return;
+  radius = value;
+  document.querySelectorAll('[data-radius]').forEach(button =>
+    button.setAttribute('aria-pressed', String(Number(button.dataset.radius) === radius)));
+  el('radiusInfo').textContent = `Promień: ${radius} km (poziomo)`;
+  el('rangeLabel').textContent = `${radius} km`;
+  el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego zasięgu…</div>';
+  update();
+}
+
+document.querySelectorAll('[data-radius]').forEach(button => {
+  button.addEventListener('click', () => setRadius(Number(button.dataset.radius)));
+});
+el('alertToggle').addEventListener('click', async () => {
+  alertEnabled = !alertEnabled;
+  el('alertToggle').setAttribute('aria-pressed', String(alertEnabled));
+  el('alertToggle').textContent = alertEnabled ? '🔔 Alarm 10 km: włączony' : '🔕 Włącz alarm 10 km';
+  if (alertEnabled) {
+    try {
+      const Audio = window.AudioContext || window.webkitAudioContext;
+      if (Audio && !audioContext) audioContext = new Audio();
+      if (audioContext?.state === 'suspended') audioContext.resume();
+    } catch { /* Tablet może nie obsługiwać Web Audio. */ }
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch { /* Pozostaje alert na stronie. */ }
+    }
+    showNotice('Alarm aktywny. Powiadomienie pojawi się przy następnym nowym samolocie w promieniu 10 km.');
+  }
+});
+el('refresh').addEventListener('click', update);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
+update();
+setInterval(() => { if (!document.hidden) update(); }, REFRESH_MS);
+</script>
+</body>
+</html>
