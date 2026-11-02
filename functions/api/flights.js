@@ -1,4 +1,4 @@
-// Radar Zaborów 4.0 — Cloudflare Pages Functions
+// Radar Zaborów 5.0 — Cloudflare Pages Functions
 // Dokładny punkt: 52°15′46,6″ N, 20°41′09,9″ E
 const LAT = 52.2629444444;
 const LON = 20.6860833333;
@@ -88,7 +88,7 @@ function fromPlanespotters(json) {
   const link = httpUrl(p.link, ['planespotters.net']);
   const photographer = String(typeof p.photographer === 'string' ? p.photographer
     : (p.photographer?.name || '')).trim();
-  if (!thumb || !link || !photographer) return null;
+  if (!thumb || !link) return null;
   return { thumbnail: thumb, link, photographer, source: 'Planespotters.net' };
 }
 function fromAdsbdb(plane) {
@@ -189,11 +189,20 @@ async function detailsFor(a, routeIndex, context) {
       try {
         const data = await cachedJson(url, cacheKey, 86400, context);
         photo = fromPlanespotters(data);
-        // Brak zdjęć w prawidłowej odpowiedzi oznacza rzeczywisty brak rekordu,
-        // nie trzeba ponownie pytać tego samego API inną drogą.
-        if (photo || Array.isArray(data?.photos) || data?.error) break;
+        if (photo) break;
       } catch { /* spróbuj kolejne źródło */ }
     }
+  }
+  // Nie każdy odbiornik raportuje poprawnie hex; drugi krok po rejestracji
+  // umożliwia odnalezienie zdjęć, gdy po ICAO24 nie ma wyniku.
+  const reg = String(plane.registration || p.registration || '').trim().toUpperCase();
+  if (!photo && /^[A-Z0-9-]{3,12}$/.test(reg)) {
+    try {
+      const data = await cachedJson(
+        `https://api.planespotters.net/pub/photos/reg/${encodeURIComponent(reg)}`,
+        `ps-reg-${reg}`, 86400, context, 4500);
+      photo = fromPlanespotters(data);
+    } catch { /* API może blokować żądania, nie psuj radaru */ }
   }
   photo = photo || fromDB;
   const route = sensibleRoute(routeIndex.get(callsign), p);
