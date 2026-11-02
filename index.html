@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 5.0 · samoloty na żywo</title>
+  <title>Radar Zaborów 6.0 · samoloty na żywo</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -64,22 +64,21 @@
     .company{color:#bcd2e8;font-size:13px;margin-top:2px}
     .logoWrap,.logoPlaceholder{width:78px;height:45px;flex:0 0 78px;display:grid;place-items:center;border:1px solid #395875;background:#f6f8fb;border-radius:9px;overflow:hidden}
     .logoWrap img{display:block;width:76px;height:43px;object-fit:contain}
+    .logoWrap img[hidden]{display:none}
     .logoPlaceholder{background:#1c3b55;border-color:#315b7e;font-size:22px;color:#7fcbff}
     .logoPlaceholder[hidden]{display:none}
     .logoWrap .logoPlaceholder{width:78px;height:45px;border:0;flex:none}
+    .routeNote{margin-top:9px;color:#a4c1dc;font-size:11px}
     .flightMain{display:grid;grid-template-columns:160px minmax(0,1fr);gap:14px;align-items:start}
     .aircraftPhoto{margin:0}
     .aircraftPhoto>a{display:block;width:160px;height:108px;border-radius:9px;border:1px solid #375471;overflow:hidden;background:#0a1a29}
     .aircraftPhoto img{display:block;width:100%;height:100%;object-fit:contain}
     .aircraftPhoto figcaption{font-size:10px;line-height:1.3;color:#b4c7d9;margin-top:5px;max-width:160px}
-    .aircraftPhoto figcaption a,.foot a{color:#95d3f6}
     .photoArea .photoFallback{display:none}
     .photoArea.failed .aircraftPhoto{display:none}
     .photoArea.failed .photoFallback{display:flex}
     .photoPlaceholder{width:160px;height:108px;border:1px dashed #466887;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#a5bfd7;font-size:11px}
     .photoPlaceholder span{font-size:28px;color:#6cb5ee}
-    .photoSearch{margin-top:7px;font-size:11px;line-height:1.5}
-    .photoSearch a{color:#9ad9ff;text-decoration:underline}
     .photoPlaceholder{padding:8px;text-align:center}
     .aircraftPhoto figcaption{word-break:break-word}
     @media (max-width:1100px){.flightMain{grid-template-columns:1fr}.aircraftPhoto>a,.photoPlaceholder{width:160px}}
@@ -135,250 +134,292 @@
   </main>
 
   <footer class="foot">
-    Odświeżanie co 30 s bez samolotów i co 10 s po ich wykryciu. Przy wygaszonym ekranie tablet może wstrzymać odświeżanie.
-    Dane pozycyjne: <a href="https://adsb.one" target="_blank" rel="noreferrer">ADSB One</a>,
-    <a href="https://adsb.lol" target="_blank" rel="noreferrer">ADSB.lol</a>,
-    <a href="https://adsb.fi" target="_blank" rel="noreferrer">ADSB.fi</a>.
-    Identyfikacja i trasy: <a href="https://adsbdb.com" target="_blank" rel="noreferrer">ADSBdb</a>,
-    <a href="https://adsb.lol" target="_blank" rel="noreferrer">ADSB.lol (weryfikacja tras)</a>.
-    Zdjęcia (jeśli dostępne): <a href="https://www.jetphotos.com/" target="_blank" rel="noopener noreferrer">JetPhotos</a> (źródłowe zdjęcia i galerie rejestracji), <a href="https://www.planespotters.net/" target="_blank" rel="noopener noreferrer">Planespotters.net</a> (autor pod każdym zdjęciem) oraz <a href="https://airport-data.com" target="_blank" rel="noopener noreferrer">airport-data.com</a> (przez ADSBdb). Logotypy: <a href="https://www.aviasales.com/" target="_blank" rel="noopener noreferrer">Aviasales</a>. Trasy są wyświetlane wyłącznie wtedy, gdy dane wydają się wiarygodne; nie są potwierdzonym planem lotu.
+    Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
+    ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
+    Trasy są orientacyjne i nie stanowią potwierdzonego planu lotu.
+    Przy wygaszonym ekranie tablet może wstrzymywać odświeżanie.
   </footer>
 
 <script>
 'use strict';
-const LAT = 52.2629444444;
-const LON = 20.6860833333;
-const DEGREES = Math.PI / 180;
-const QUIET_REFRESH_MS = 30000;
-const BUSY_REFRESH_MS = 10000;
+const HOME_LAT = 52.2629444444;
+const HOME_LON = 20.6860833333;
+const DEG = Math.PI / 180;
+const ACTIVE_MS = 3000;         // dokładnie 3 s po odpowiedzi serwera
+const IDLE_MS = 30000;
+const METADATA_MS = 90000;      // zdjęcia i trasy najwyżej raz na 90 s
+const NEW_PLANE_METADATA_MS = 15000;
 const el = id => document.getElementById(id);
-const safe = value => String(value ?? 'Brak danych').replace(/[&<>"']/g,
-  ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const validRadius = number => Number.isFinite(number) && number >= 1 && number <= 200;
-
-let radius = 10;
-let last = [];
-let updateNumber = 0;
-let controller = null;
-let nextTimer = null;
-
-try {
-  const stored = Number(localStorage.getItem('radar-zaborow-radius'));
-  if (validRadius(stored)) radius = stored;
-} catch { /* Pamięć ustawień nie jest wymagana. */ }
-el('radiusInput').value = String(radius);
-
-function planeKey(f) {
-  return String(f.hex || f.flight || f.registration || '').trim().toUpperCase();
-}
-function field(label, value) {
-  return `<div><span class="label">${safe(label)}</span><div class="value">${safe(value)}</div></div>`;
-}
-function routeAirport(a) {
-  return a ? [a.code, a.name].filter(Boolean).join(' · ') || null : null;
-}
-// JetPhotos: użytkownik wskazał konkretną fotografię SP-LYI. To jest link
-// do oryginalnego pliku na CDN (nie pobieramy i nie hostujemy kopii).
-// Automatyczne pobieranie pełnej bazy JetPhotos wymaga osobnego dostępu/licencji.
-const JETPHOTOS_VERIFIED = Object.freeze({
-  'SP-LYI': {
-    thumbnail: 'https://cdn.jetphotos.com/full/6/403071_1788942970.jpg',
-    link: 'https://www.jetphotos.com/photo/12226928',
-    photographer: 'Paweł Cieplak',
-    source: 'JetPhotos'
-  }
-});
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const textOrDash = value => value == null || value === '' ? 'Brak danych' : String(value);
+const goodRadius = n => Number.isFinite(n) && n >= 1 && n <= 200;
 const AIRLINES = Object.freeze({
-  LOT: { name: 'LOT Polish Airlines', iata: 'LO' },
-  RYR: { name: 'Ryanair', iata: 'FR' },
-  WZZ: { name: 'Wizz Air', iata: 'W6' },
-  DLH: { name: 'Lufthansa', iata: 'LH' },
-  BAW: { name: 'British Airways', iata: 'BA' },
-  KLM: { name: 'KLM', iata: 'KL' },
-  AFR: { name: 'Air France', iata: 'AF' },
-  UAE: { name: 'Emirates', iata: 'EK' },
-  THY: { name: 'Turkish Airlines', iata: 'TK' },
-  SAS: { name: 'Scandinavian Airlines', iata: 'SK' }
+  LOT: ['LOT Polish Airlines','LO'], RYR: ['Ryanair','FR'], WZZ: ['Wizz Air','W6'],
+  DLH: ['Lufthansa','LH'], BAW: ['British Airways','BA'], KLM: ['KLM','KL'],
+  AFR: ['Air France','AF'], UAE: ['Emirates','EK'], THY: ['Turkish Airlines','TK'],
+  SAS: ['Scandinavian Airlines','SK'], EZY: ['easyJet','U2'], ENT: ['Enter Air','E4']
 });
-function airlineInfo(f) {
-  const prefix = String(f.flight || '').trim().toUpperCase().slice(0, 3);
-  return AIRLINES[prefix] || null;
-}
-function regCode(f) {
-  const value = String(f.registration || '').trim().toUpperCase();
-  return /^[A-Z0-9-]{3,12}$/.test(value) ? value : null;
-}
-function jetphotosGallery(f) {
-  const reg = regCode(f);
-  return reg ? 'https://www.jetphotos.com/registration/' + encodeURIComponent(reg) : null;
-}
-function photoCaption(photo) {
-  if (photo?.source === 'JetPhotos') {
-    return `© ${safe(photo.photographer)} · <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">JetPhotos</a>`;
+// Fotografia podana przez użytkownika. Nie kopiujemy pliku zdjęcia na hosting;
+// wymagane jest upewnienie się, że publiczne osadzanie jest dozwolone.
+const USER_PHOTOS = Object.freeze({
+  'SP-LYI': {
+    thumbnail:'https://cdn.jetphotos.com/full/6/403071_1788942970.jpg',
+    link:'https://www.jetphotos.com/photo/12226928',
+    photographer:'Paweł Cieplak', source:'JetPhotos'
   }
-  if (photo?.source === 'Planespotters.net') {
-    return `© ${safe(photo.photographer || 'Autor fotografii')} · <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">Planespotters.net</a>`;
-  }
-  return `<a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}">Zdjęcie: airport-data.com / ADSBdb</a>`;
+});
+function k(plane) { return String(plane.hex || plane.flight || plane.registration || '').toUpperCase(); }
+function field(label, value, role = '') {
+  return `<div><span class="label">${escapeHtml(label)}</span><div class="value"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</div></div>`;
 }
-function photoHTML(f) {
-  const gallery = jetphotosGallery(f);
-  const galleryLink = gallery
-    ? `<div class="photoSearch"><a target="_blank" rel="noopener noreferrer" href="${safe(gallery)}">Galeria ${safe(regCode(f))} na JetPhotos</a></div>`
-    : '';
-  const ownPhoto = regCode(f) ? JETPHOTOS_VERIFIED[regCode(f)] : null;
-  const photo = ownPhoto || f.photo;
-  if (!photo?.thumbnail || !photo?.link) {
-    return `<div class="photoPlaceholder" aria-label="Zdjęcie samolotu niedostępne"><span>✈</span>Brak miniatury</div>${galleryLink}`;
-  }
-  // Jeśli CDN JetPhotos nie udostępni obrazu na innej stronie, pokaż
-  // zdjęcie z publicznego API albo czytelny link do oryginału.
-  const fallback = ownPhoto ? f.photo : f.photo_fallback;
-  return `<div class="photoArea"><figure class="aircraftPhoto">
-      <a target="_blank" rel="noopener noreferrer" href="${safe(photo.link)}" title="Zobacz zdjęcie u autora">
-        <img src="${safe(photo.thumbnail)}" alt="Samolot ${safe(f.registration || f.model || f.flight || '')}"
-          loading="lazy" referrerpolicy="no-referrer"
-          data-alt-src="${safe(fallback?.thumbnail || '')}"
-          data-alt-link="${safe(fallback?.link || '')}"
-          data-alt-source="${safe(fallback?.source || '')}"
-          data-alt-author="${safe(fallback?.photographer || '')}"></a>
-      <figcaption>${photoCaption(photo)}</figcaption>
-    </figure><div class="photoPlaceholder photoFallback"><span>✈</span>Zdjęcie niedostępne · otwórz galerię</div></div>${galleryLink}`;
-}
-function attachPhotoFallbacks() {
-  document.querySelectorAll('.photoArea img').forEach(img => {
-    img.addEventListener('error', () => {
-      if (img.dataset.altSrc) {
-        const alternate = {
-          thumbnail: img.dataset.altSrc,
-          link: img.dataset.altLink,
-          source: img.dataset.altSource,
-          photographer: img.dataset.altAuthor
-        };
-        img.dataset.altSrc = '';
-        const a = img.closest('a');
-        const caption = img.closest('figure')?.querySelector('figcaption');
-        if (a && alternate.link) a.href = alternate.link;
-        if (caption && alternate.link) caption.innerHTML = photoCaption(alternate);
-        img.src = alternate.thumbnail;
-      } else {
-        img.closest('.photoArea')?.classList.add('failed');
-      }
-    });
-  });
+function airportText(a) { return a ? [a.code, a.name].filter(Boolean).join(' · ') : 'Nieustalona'; }
+function flightDetails(f) {
+  const ident = String(f.flight || '').slice(0, 3).toUpperCase();
+  const airline = AIRLINES[ident];
+  return {
+    name: airline?.[0] || f.operator || 'Nieznany przewoźnik',
+    iata: /^[A-Z0-9]{2}$/.test(f.airline_iata || '') ? f.airline_iata : airline?.[1] || '',
+  };
 }
 function logoHTML(f) {
-  const auto = airlineInfo(f);
-  const iata = /^[A-Z0-9]{2}$/.test(f.airline_iata || '') ? f.airline_iata : auto?.iata;
-  if (!iata) return '<span class="logoPlaceholder" title="Brak logo">✈</span>';
-  return `<span class="logoWrap"><img src="https://pics.avs.io/100/45/${iata}.png" alt="Logo ${safe(auto?.name || f.operator || iata)}" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="logoPlaceholder" hidden>✈</span></span>`;
+  const airline = flightDetails(f);
+  if (!airline.iata) return '<div class="logoPlaceholder" aria-hidden="true">✈</div>';
+  const code = encodeURIComponent(airline.iata);
+  return `<div class="logoWrap"><img src="https://pics.avs.io/100/45/${code}.png" alt="Logo ${escapeHtml(airline.name)}" loading="lazy"><span class="logoPlaceholder" hidden>✈</span></div>`;
 }
-function render(data) {
-  last = Array.isArray(data.flights) ? data.flights : [];
-  el('count').textContent = `${last.length} samolotów`;
-  el('nearCount').textContent = String(data.inside_10km ?? last.filter(f => Number(f.km) <= 10).length);
-  el('allCount').textContent = String(last.length);
+function photoHTML(f) {
+  const manual = USER_PHOTOS[String(f.registration || '').toUpperCase()];
+  const photo = manual || f.photo;
+  if (!photo?.thumbnail) return '<div class="photoPlaceholder" aria-label="Zdjęcie niedostępne"><span>✈</span>Brak zdjęcia</div>';
+  const fallback = manual ? f.photo : f.photo_fallback;
+  // Link jest wyłącznie na miniaturze (atrybucja licencyjna), bez przycisków w karcie.
+  const href = photo.link && /^https:\/\//.test(photo.link) ? photo.link : '';
+  return `<figure class="aircraftPhoto">
+    <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" tabindex="-1">
+      <img src="${escapeHtml(photo.thumbnail)}" alt="${escapeHtml(f.registration || f.model || 'Samolot')}"
+        loading="lazy" referrerpolicy="no-referrer"
+        data-alt-src="${escapeHtml(fallback?.thumbnail || '')}"
+        data-alt-link="${escapeHtml(fallback?.link || '')}"
+        data-alt-source="${escapeHtml(fallback?.source || '')}"
+        data-alt-author="${escapeHtml(fallback?.photographer || '')}"></a>
+    <figcaption>${escapeHtml(photo.photographer ? '© ' + photo.photographer : 'Fotografia')}
+      · ${escapeHtml(photo.source || 'Źródło zdjęcia')}</figcaption></figure>`;
+}
+function flightCard(f) {
+  const near = f.km <= 10, company = flightDetails(f);
+  const hasRoute = f.from && f.to;
+  return `<article class="flight" data-flight-key="${escapeHtml(k(f))}">
+    <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
+      <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
+      <div class="company">${escapeHtml(company.name)}</div></div></div>
+      <span class="dist ${near ? 'near' : ''}" data-role="dist">${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
+    <div class="flightMain"><div>${photoHTML(f)}</div><div class="fields">
+      ${field('Samolot', f.model)}${field('Rejestracja', f.registration)}
+      ${field('Skąd', hasRoute ? airportText(f.from) : 'Nieustalona')}
+      ${field('Dokąd', hasRoute ? airportText(f.to) : 'Nieustalona')}
+      ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
+      ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
+    </div></div>${hasRoute ? `<div class="routeNote">Trasa ${escapeHtml(f.route_status || 'orientacyjna')} · nie jest potwierdzonym planem lotu</div>` : ''}</article>`;
+}
+
+let radius = 10;
+try {
+  const saved = Number(localStorage.getItem('radar-zaborow-radius'));
+  if (goodRadius(saved)) radius = saved;
+} catch { /* pamięć opcjonalna */ }
+el('radiusInput').value = String(radius);
+
+let current = [];
+let meta = new Map();
+let timer = null;
+let positionAbort = null;
+let detailAbort = null;
+let detailInFlight = false;
+let lastDetailAttempt = 0;
+let requestEpoch = 0;
+let cardKeys = '';
+
+function merged(plane) {
+  const m = meta.get(k(plane));
+  return m ? { ...plane, ...m, lat:plane.lat, lon:plane.lon, km:plane.km,
+    altitude_m:plane.altitude_m, speed_kmh:plane.speed_kmh, track:plane.track } : plane;
+}
+function radarPoints() {
+  el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
+  el('rangeLabel').textContent = radius.toLocaleString('pl-PL') + ' km';
+  let svg = '';
+  for (const f of current) {
+    if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
+    const dx = (f.lon - HOME_LON) * Math.cos(HOME_LAT * DEG) * 111.2;
+    const dy = (f.lat - HOME_LAT) * 111.2;
+    const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
+    if (Math.hypot(x - 200, y - 200) > 178) continue;
+    svg += `<g><circle class="dot ${f.km <= 10 ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
+      <text class="planeLabel" x="${(x+8).toFixed(1)}" y="${(y-7).toFixed(1)}">${escapeHtml(f.flight || f.registration || '✈')}</text></g>`;
+  }
+  el('dots').innerHTML = svg;
+}
+function attachMediaErrors() {
+  for (const logo of el('flights').querySelectorAll('.logoWrap img')) {
+    logo.addEventListener('error', () => {
+      logo.hidden = true;
+      const next = logo.nextElementSibling;
+      if (next) next.hidden = false;
+    }, { once:true });
+  }
+  for (const img of el('flights').querySelectorAll('.aircraftPhoto img')) {
+    img.addEventListener('error', () => {
+      if (img.dataset.altSrc) {
+        const { altSrc, altLink, altSource, altAuthor } = img.dataset;
+        img.dataset.altSrc = '';
+        img.src = altSrc;
+        const a = img.closest('a');
+        if (a && altLink) a.href = altLink;
+        const caption = img.closest('figure')?.querySelector('figcaption');
+        if (caption) caption.textContent = `${altAuthor ? '© ' + altAuthor : 'Fotografia'} · ${altSource || 'Źródło zdjęcia'}`;
+      } else {
+        const figure = img.closest('figure');
+        if (figure) figure.outerHTML = '<div class="photoPlaceholder"><span>✈</span>Brak zdjęcia</div>';
+      }
+    });
+  }
+}
+function paintCards(force = false) {
+  const keys = current.map(k).join('|');
+  if (!force && keys === cardKeys) {
+    for (const article of el('flights').querySelectorAll('[data-flight-key]')) {
+      const f = current.find(p => k(p) === article.dataset.flightKey);
+      if (!f) continue;
+      const dist = article.querySelector('[data-role="dist"]');
+      const alt = article.querySelector('[data-role="alt"]');
+      const speed = article.querySelector('[data-role="speed"]');
+      if (dist) {
+        dist.textContent = f.km + ' km' + (f.km <= 10 ? ' · strefa 10 km' : '');
+        dist.classList.toggle('near', f.km <= 10);
+      }
+      if (alt) alt.textContent = f.altitude_m == null ? 'Brak danych' : f.altitude_m.toLocaleString('pl-PL') + ' m';
+      if (speed) speed.textContent = f.speed_kmh == null ? 'Brak danych' : f.speed_kmh + ' km/h';
+    }
+    return;
+  }
+  cardKeys = keys;
+  el('flights').innerHTML = current.length
+    ? current.map(p => flightCard(merged(p))).join('')
+    : `<div class="empty">Brak samolotów w promieniu ${radius.toLocaleString('pl-PL')} km.</div>`;
+  attachMediaErrors();
+}
+function updateVisuals(data) {
+  current = Array.isArray(data.flights) ? data.flights : [];
+  el('count').textContent = current.length + ' samolotów';
+  el('nearCount').textContent = String(data.inside_10km ?? current.filter(f => f.km <= 10).length);
+  el('allCount').textContent = String(current.length);
+  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
   const dt = new Date(data.updated);
   el('time').textContent = 'Stan: ' + (Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pl-PL') : '—');
-  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
-  el('rangeLabel').textContent = `${radius.toLocaleString('pl-PL')} km`;
-  el('zone10').setAttribute('r', String(178 * Math.min(1,10/radius)));
-  el('ringHalf').setAttribute('r', '89');
-  el('refreshInfo').textContent = last.length ? 'Co 10 s · wykryto samolot' : 'Co 30 s · brak samolotów';
-  el('refreshInfo').className = last.length ? 'speed fast' : 'speed';
-
-  el('flights').innerHTML = last.length ? last.map(f => {
-    const near = Number(f.km) <= 10;
-    return `<article class="flight">
-      <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
-        <strong>${safe(f.flight || f.registration || f.hex || 'Samolot')}</strong>
-        <div class="company">${safe(airlineInfo(f)?.name || f.operator || 'Nieznana linia / operator')}</div></div></div>
-        <span class="dist ${near ? 'near' : ''}">${safe(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
-      <div class="flightMain"><div>${photoHTML(f)}</div><div class="fields">
-        ${field('Samolot', f.model)}${field('Rejestracja',f.registration)}
-        ${field('Skąd',routeAirport(f.from) || 'Trasa niepotwierdzona')}${field('Dokąd',routeAirport(f.to) || 'Trasa niepotwierdzona')}
-        ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m')}
-        ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h')}
-      </div></div></article>`;
-  }).join('') : `<div class="empty">Brak wykrytych samolotów w promieniu ${radius.toLocaleString('pl-PL')} km.<p>Radar spróbuje ponownie za 30 sekund.</p></div>`;
-
-  attachPhotoFallbacks();
-
-  let dots = '';
-  for (const f of last) {
-    if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
-    const dx = (f.lon - LON) * Math.cos(LAT * DEGREES) * 111.2;
-    const dy = (f.lat - LAT) * 111.2;
-    const x = 200 + dx / radius * 178;
-    const y = 200 - dy / radius * 178;
-    if (Math.hypot(x - 200, y - 200) > 178) continue;
-    const near = Number(f.km) <= 10;
-    dots += `<g><circle class="dot ${near ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
-      <text class="planeLabel" x="${(x + 8).toFixed(1)}" y="${(y - 7).toFixed(1)}">${safe(f.flight || f.registration || '✈')}</text></g>`;
-  }
-  el('dots').innerHTML = dots;
+  const fast = current.length > 0;
+  el('refreshInfo').textContent = fast ? 'Co 3 s · wykryto samolot' : 'Co 30 s · brak samolotów';
+  el('refreshInfo').className = fast ? 'speed fast' : 'speed';
+  radarPoints();
+  paintCards();
 }
-function scheduleNext(ms) {
-  clearTimeout(nextTimer);
-  if (document.hidden) return;
-  nextTimer = setTimeout(update, ms);
+function schedule(ms) {
+  clearTimeout(timer);
+  if (!document.hidden) timer = setTimeout(pollPositions, ms);
 }
-async function update() {
-  clearTimeout(nextTimer);
-  const id = ++updateNumber;
-  if (controller) controller.abort();
-  controller = new AbortController();
-  const chosen = radius;
-  let nextMs = QUIET_REFRESH_MS;
-  el('status').textContent = `Aktualizacja · ${chosen.toLocaleString('pl-PL')} km…`;
+async function enrichIfNeeded(epoch) {
+  if (!current.length || detailInFlight || document.hidden) return;
+  const now = Date.now();
+  const newPlane = current.some(f => !meta.has(k(f)));
+  if (now - lastDetailAttempt < (newPlane ? NEW_PLANE_METADATA_MS : METADATA_MS)) return;
+  lastDetailAttempt = now;
+  detailInFlight = true;
+  detailAbort = new AbortController();
   try {
-    const response = await fetch(`/api/flights?radius=${encodeURIComponent(chosen)}`,
-      { cache:'no-store', signal:controller.signal });
+    const response = await fetch(`/api/flights?radius=${encodeURIComponent(radius)}&mode=full`,
+      { cache:'no-store', signal:detailAbort.signal });
+    if (!response.ok) return;
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-    if (id !== updateNumber) return;
-    render(data);
-    nextMs = data.count > 0 ? BUSY_REFRESH_MS : QUIET_REFRESH_MS;
-    el('status').textContent = `● Radar działa · ${data.source || 'API'}`;
+    if (epoch !== requestEpoch) return;
+    for (const f of data.flights || []) {
+      meta.set(k(f), {
+        registration:f.registration, model:f.model, operator:f.operator,
+        airline_iata:f.airline_iata, from:f.from, to:f.to,
+        route_status:f.route_status, photo:f.photo, photo_fallback:f.photo_fallback,
+      });
+    }
+    // Ograniczamy pamięć tabletu po wielu godzinach pracy.
+    if (meta.size > 250) meta = new Map([...meta].slice(-150));
+    paintCards(true);
+  } catch { /* dane pozycyjne będą działać niezależnie od metadanych */ }
+  finally { detailInFlight = false; }
+}
+async function pollPositions() {
+  clearTimeout(timer);
+  if (document.hidden) return;
+  const epoch = requestEpoch;
+  if (positionAbort) positionAbort.abort();
+  positionAbort = new AbortController();
+  let next = current.length ? ACTIVE_MS : IDLE_MS;
+  el('status').textContent = 'Aktualizacja…';
+  try {
+    const res = await fetch(`/api/flights?radius=${encodeURIComponent(radius)}&mode=positions`,
+      { cache:'no-store', signal:positionAbort.signal });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+    if (epoch !== requestEpoch) return;
+    updateVisuals(data);
+    next = current.length ? ACTIVE_MS : IDLE_MS;
+    el('status').textContent = `● Radar działa · ${data.source || 'ADS-B'}`;
     el('status').className = 'pill';
+    void enrichIfNeeded(epoch);
   } catch (error) {
-    if (id !== updateNumber || error.name === 'AbortError') return;
+    if (epoch !== requestEpoch || error.name === 'AbortError') return;
     el('status').textContent = '⚠ Brak połączenia';
     el('status').className = 'pill bad';
     el('refreshInfo').textContent = 'Ponowna próba za 30 s';
     el('refreshInfo').className = 'speed';
-    if (!last.length) el('flights').innerHTML = `<div class="empty">Nie udało się pobrać danych.<p>${safe(error.message)}</p>Spróbuj ponownie.</div>`;
+    // Spowolnij próby po błędach lub limitach API.
+    next = IDLE_MS;
+    if (!current.length) el('flights').innerHTML = `<div class="empty">Błąd pobierania danych: ${escapeHtml(error.message)}</div>`;
   } finally {
-    if (id === updateNumber) scheduleNext(nextMs);
+    if (epoch === requestEpoch) schedule(next);
   }
 }
 function setRadius(newRadius) {
-  if (!validRadius(newRadius)) return;
+  if (!goodRadius(newRadius)) return;
   el('radiusError').textContent = '';
   el('radiusInput').value = String(newRadius);
   if (radius === newRadius) return;
   radius = newRadius;
-  try { localStorage.setItem('radar-zaborow-radius', String(radius)); } catch { /* opcjonalne */ }
-  el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
-  el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego promienia…</div>';
-  update();
+  requestEpoch++;
+  cardKeys = '';
+  current = [];
+  if (positionAbort) positionAbort.abort();
+  if (detailAbort) detailAbort.abort();
+  try { localStorage.setItem('radar-zaborow-radius', String(radius)); } catch {}
+  el('flights').innerHTML = '<div class="empty">Pobieranie danych…</div>';
+  void pollPositions();
 }
 el('radiusForm').addEventListener('submit', event => {
   event.preventDefault();
-  const input = el('radiusInput').value.trim().replace(',','.');
-  const radiusValue = Number(input);
-  if (!/^\d+(?:\.\d{1,2})?$/.test(input) || !validRadius(radiusValue)) {
-    el('radiusError').textContent = 'Podaj promień od 1 do 200 km (np. 12,5).';
+  const raw = el('radiusInput').value.trim().replace(',', '.');
+  const n = Number(raw);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || !goodRadius(n)) {
+    el('radiusError').textContent = 'Podaj promień 1–200 km (np. 12,5).';
     return;
   }
-  setRadius(radiusValue);
+  setRadius(n);
 });
-el('refresh').addEventListener('click', update);
+el('refresh').addEventListener('click', () => { clearTimeout(timer); void pollPositions(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { clearTimeout(nextTimer); if (controller) controller.abort(); }
-  else update();
+  if (document.hidden) {
+    clearTimeout(timer);
+    if (positionAbort) positionAbort.abort();
+    if (detailAbort) detailAbort.abort();
+  } else { void pollPositions(); }
 });
-update();
+void pollPositions();
 </script>
 </body>
 </html>

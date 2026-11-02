@@ -1,21 +1,34 @@
-# Radar Zaborów 5.0 — zdjęcia i galerie JetPhotos
+# Radar Zaborów 6.0 – trasy i odświeżanie co 3 sekundy
 
-Wersja oparta na Radarze Zaborów 4.0. Zachowuje radar, trasę (jeśli potwierdzona), promień wpisywany ręcznie oraz odświeżanie 30/10 s. Nie dodaje alarmu.
+Cloudflare Pages + funkcja serverless. Punkt obserwacyjny: **52.26294444 N, 20.68608333 E**.
 
-## Co zmieniono
+## Co się zmieniło
 
-- Dla samolotu **SP-LYI** dostępny jest podany przez użytkownika odnośnik do fotografii [JetPhotos #12226928](https://www.jetphotos.com/photo/12226928) (fot. Paweł Cieplak). Przeglądarka ładuje zdjęcie bezpośrednio z CDN JetPhotos — nie zapisujemy kopii na Cloudflare ani w repozytorium. Jeśli serwer nie zezwoli na obraz na cudzej stronie, pokaże się awaryjna miniatura lub link do galerii.
-- Dla innych samolotów strona wyświetla miniaturę z **Planespotters.net** lub **ADSBdb**, jeśli uda się pobrać, a zawsze również link do galerii JetPhotos po numerze rejestracyjnym.
-- API próbuje też wyszukiwać miniatury w Planespotters po numerze rejestracyjnym, jeśli brak zdjęcia po identyfikatorze hex.
-- Rozpoznawanie podstawowych linii po prefiksie znaku wywoławczego (LOT, RYR, WZZ itp.) działa także bez danych operatora z ADSBdb.
+- **3 s** między odczytami pozycji, gdy w ustawionym promieniu widać co najmniej jeden samolot; **30 s**, gdy nie ma samolotów. Po błędzie odczekuje 30 s.
+- Metadane lotów (trasy, rejestracje, zdjęcia) są pobierane osobno, znacznie rzadziej, maksymalnie co 90 s dla znanych maszyn, lub po co najmniej 15 s od poprzedniej próby, jeśli pojawią się nowe. Dzięki temu obraz i logo nie migają co 3 s, a serwisy zewnętrzne nie są niepotrzebnie obciążane.
+- Przebudowana logika tras: ADSB.lol `routeset` + ADSBdb, opcjonalnie HexDB. W pobliżu lotniska bierze pod uwagę wysokość, odległość i prędkość pionową oraz kierunek lotu. Gdy źródła są sprzeczne lub nie pozwalają sensownie określić trasy, karta pokazuje „Nieustalona”. Wyświetlone trasy są **orientacyjne** i nie stanowią potwierdzonego planu lotu.
+- Usunięto dodatkowe linki do galerii JetPhotos i przyciski z kart samolotów, a także linki z dolnej belki. Miniatura z Planespotters.net jest wciąż łączem do oryginalnego zdjęcia (wymagane przez warunki dostawcy) i ma podpis autora. To nie jest osobny przycisk ani widoczny link tekstowy.
+- Zachowano wpisywanie własnego promienia 1–200 km, radar, logotypy, zdjęcia i widoczną strefę 10 km. Nie ma alarmu.
 
-**Ograniczenie:** JetPhotos nie ma tu podłączonego oficjalnego publicznego API wyszukiwania fotografii. Samo podanie URL JetPhotos nie umożliwia automatycznej obsługi wszystkich samolotów. Ich serwery mogą blokować hotlinkowanie, a publiczna prezentacja zdjęć wymaga respektowania warunków autora; na karcie wskazanego zdjęcia jest napisane „Contact photographer for terms of use”. Aby korzystać ze zdjęcia na publicznej stronie, poproś o zgodę autora lub użyj udostępnianej przez portal opcji osadzania, o ile pozwala na takie zastosowanie.
+## Instalacja
 
-## Aktualizacja
+W repozytorium `kpokonieczny1/radar-zaborow` zastąp dwa pliki:
 
-1. Podmień `index.html` w głównym katalogu repozytorium.
-2. Podmień `functions/api/flights.js` w katalogu `functions/api/`.
-3. Kliknij **Commit changes**. Cloudflare Pages automatycznie wdroży nową wersję.
-4. Otwórz `https://radar-zaborow.pages.dev/`, ewentualnie odśwież `Ctrl+F5`.
+1. Plik główny `index.html`.
+2. `functions/api/flights.js`.
 
-Bezpośrednie zdjęcie SP-LYI i pozostałe odnośniki nie stanowią gwarancji dostępności fotografii na stronie. Jeśli dostęp do CDN wymaga zgody właściciela, wyłącz wpis w stałej `JETPHOTOS_VERIFIED` w pliku `index.html`.
+Zatwierdź zmiany (**Commit changes**). Cloudflare Pages wdroży je automatycznie. Po zakończeniu otwórz https://radar-zaborow.pages.dev/ i zrób Ctrl+F5.
+
+## Testowanie
+
+- **Pozycje bez obciążających dodatków**: `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=positions`
+- **Pozycje + trasy + zdjęcia**: `https://radar-zaborow.pages.dev/api/flights?radius=20&mode=full`
+
+Przy działającym połączeniu pierwszy endpoint zwraca `count`, `flights`, `inside_10km`; drugi dodatkowo pola `from`, `to`, `route_status`, `photo`. Kiedy nie ma danych o trasie, pola `from` i `to` będą `null` – to uczciwsze niż błędny kierunek lotu.
+
+## Ważne ograniczenia
+
+- 3 sekundy to częstotliwość **prób odświeżenia**. Dane ADS-B niekoniecznie zmieniają się tak szybko, a gdy serwer lub dostawca ogranicza ruch (np. 429/403), aplikacja zwalnia do 30 s. Jeżeli ruch na tablecie byłby stale aktywny przez całą dobę, oznacza to do ok. 28 800 odczytów pozycji dziennie; trzeba respektować regulaminy dostawców i ich zmienne limity API.
+- Po zablokowaniu/uśpieniu tabletu przeglądarka może zawiesić JavaScript.
+- Jedna fotografia SP-LYI pochodzi z ręcznie wskazanego odnośnika JetPhotos i może być niedostępna w trybie osadzania. **Przed jej publicznym eksponowaniem należy upewnić się, że fotograf udzielił zgody lub zastosować dozwoloną formę osadzania**. Można usunąć wpis `SP-LYI` w obiekcie `USER_PHOTOS` w `index.html`, aby go wyłączyć.
+- Żaden otwarty katalog tras nie gwarantuje aktualnej trasy danego rejsu. Pełna zgodność z Flightradar24 wymaga odrębnego źródła danych/licencji.
