@@ -1,38 +1,32 @@
-## Aktualizacja 14.1
+# Radar Zaborów 15.0 — kompaktowy interfejs i filtr ruchu naziemnego
 
-Dodano kod IATA `QPB` — Warszawa-Babice, Polska (`POL`); zachowano `EPBC`.
-Aby zaktualizować, podmień `index.html`, `functions/api/fr24-routes.js` i `functions/api/airports.js` na GitHubie.
-Pozostałe ustawienia Cloudflare bez zmian.
+Aktualizacja działającego projektu **Cloudflare Pages** w repozytorium `kpokonieczny1/radar-zaborow`.
 
-# Radar Zaborów 14.0
+## Co nowego
 
-Aktualizacja wersji 13.0 — nowe ikony na radarze, zwijany panel FR24 i obsługa tras niepełnych.
+1. Niski nagłówek i pojedynczy pasek trzech lokalizacji: **Zaborów**, **Mieszkanie**, **Praca**. Ustawienia współrzędnych, promienia i częstotliwości są domyślnie zwinięte. Zawartość FR24 również można rozwinąć tylko wtedy, kiedy jest potrzebna.
+2. Każda karta lotu ma **zdjęcie po lewej**, a po prawej w kilku wierszach nazwę przewoźnika, znak wywoławczy, lotniska wylotu i przylotu, kod kraju oraz model, rejestrację, numer rejsu (jeśli dostępny), wysokość i prędkość. Karta jest tak zwarta, jak to możliwe przy czytelnej prezentacji wszystkich danych. Przy małej szerokości ekranu wysokość może wzrosnąć.
+3. Odfiltrowano pojazdy obsługi lotniska i obiekty naziemne **jeszcze po stronie API**, zanim trafią na radar. Filtr wykorzystuje kategorię ADS-B (`C0`–`C7`) lub informację o znajdowaniu się na ziemi (`alt_baro: "ground"` / `on_ground: true`). **Samoloty kołujące także są ukrywane; pojawią się, kiedy będą w powietrzu.** Nieznane lub błędne oznaczenia w danych zewnętrznych mogą pozostawić pojedyncze pojazdy na liście.
 
-## Zmiany
+## Aktualizacja GitHuba
 
-- **Panel „Trasy Flightradar24” jest domyślnie zwinięty.** Rozwiń go, aby włączyć lub wyłączyć FR24. Stan „Aktywne” / „Wyłączone” widać również po zwinięciu.
-- **Pozycje samolotów mają sylwetki w rzucie z góry, obracane według pola `track` (0° = północ, 90° = wschód).** Brak danych o kursie jest oznaczony znakiem `?`, aby nie sugerować błędnego kierunku.
-- **Niepełna trasa FR24 nie jest odrzucana.** Dla lotu z lotniska EPBC będzie pokazane `Wylot: EPBC · Warszawa-Babice · POL` i `Przylot: Lotnisko docelowe nieznane`, jeśli API nie ma danych o celu.
-- Dodana lokalna nazwa lotniska Warszawa-Babice (EPBC) i kod kraju POL, również do zapasowej bazy lotnisk.
-- Zachowane: zdjęcia, linie, promień i współrzędne środka (Zaborów/Mieszkanie/Praca), ustawiany interwał, zabezpieczenia dostępu i cache FR24.
+Należy podmienić **dokładnie dwa pliki**:
 
-## Wdrożenie na Cloudflare Pages
+- `index.html` w katalogu głównym repozytorium;
+- `functions/api/flights.js` w katalogu `functions/api/`.
 
-Z rozpakowanego archiwum **podmień dokładnie trzy pliki** w repozytorium `kpokonieczny1/radar-zaborow`:
+Nie trzeba zmieniać plików `functions/api/fr24-routes.js`, `functions/api/airports.js` ani `functions/api/fr24.js`, o ile są już zainstalowane z wersji 14.1. Wersja 15 zachowuje ustawienia FR24, domyślne trzy lokalizacje, zdjęcia, logo, rozpoznawanie Babic `QPB` / `EPBC` i częstotliwość 3 s (albo inną wpisaną przez użytkownika).
 
-1. `index.html` (główny katalog repozytorium),
-2. `functions/api/fr24-routes.js`,
-3. `functions/api/airports.js`.
+Wgraj nowe pliki do tych samych katalogów, wykonaj **Commit changes**, poczekaj na wdrożenie w Cloudflare Pages i otwórz `https://radar-zaborow.pages.dev/`. W razie starego wyglądu użyj `Ctrl+F5`.
 
-Pozostałe pliki mogą zostać takie, jak w obecnej instalacji (dotychczasowe `flights.js` i `fr24.js` pozostają bez zmian). Zatwierdź zmiany w GitHubie przez **Commit changes**, poczekaj na zakończenie automatycznego wdrożenia w Cloudflare Pages i odśwież stronę klawiszami Ctrl+F5.
+## Jak ustawić radary
 
-Sekrety Cloudflare (`FR24_API_TOKEN`, `FR24_ROUTE_PIN` oraz potwierdzenie uprawnień do hybrydowego użycia FR24) pozostają bez zmian. **Nigdy nie umieszczaj tokenu w HTML ani repozytorium.**
+- Przyciskami w górnym pasku wybierasz lokalizację.
+- Przycisk **⚙ Ustawienia** rozwija pola promienia, współrzędnych i interwału.
+- Przycisk **Trasy FR24** rozwija panel włączania/wyłączania tras. Przechowywanie i zabezpieczenie tokenu FR24 pozostaje bez zmian.
 
-## Sprawdzenie
+## Ograniczenia
 
-1. Panel FR24 ma być domyślnie zwinięty, a przycisk do aktywacji widoczny po rozwinięciu.
-2. Gdy dostępna jest wartość `track`, ikona samolotu ma wskazywać kurs; bez `track` powinno pojawić się `?`.
-3. Lot z kodem EPBC i bez lotniska docelowego ma pokazać „Warszawa-Babice → Lotnisko docelowe nieznane”.
-4. Brak części trasy nie może wywoływać ciągłych ponownych zapytań FR24 co 3 sekundy — taka informacja jest buforowana jako rozpoznana.
-
-Uwaga: testy offline na danych testowych nie stanowią potwierdzenia, że produkcyjne API FR24 poda wszystkie lotniska. Dane częściowe pokazujemy bez zgadywania celu podróży.
+- Pozycje i kategorie pochodzą z zewnętrznej sieci ADS-B. Filtr jest heurystyczny i nie stanowi gwarancji identyfikacji rodzaju obiektu.
+- Odświeżanie co 3 sekundy to *częstotliwość zapytań*, a nie gwarancja nowych danych w każdej odpowiedzi.
+- Układ i filtr przetestowano na przykładowych danych w środowisku przeglądarkowym; bieżące działanie na produkcyjnym Cloudflare należy sprawdzić po wdrożeniu.

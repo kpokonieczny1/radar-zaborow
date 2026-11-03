@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 14.0 · ADS-B + trasy FR24</title>
+  <title>Radar Zaborów 15.0 · kompaktowy widok</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -142,6 +142,105 @@
     @media (max-width:520px){.routeStrip{grid-template-columns:1fr;gap:5px}
       .routeArrow{font-size:18px;transform:rotate(90deg);line-height:1}
       .routeAirport{min-height:auto}}
+
+    /* Radar 15.0 – górny pasek i zwijane ustawienia. */
+    body{padding:10px 14px;max-width:1580px}
+    h1{font-size:21px;line-height:1.15}
+    h2{font-size:16px}
+    .header{margin-bottom:7px;gap:8px}
+    .sub{font-size:11px;margin-top:1px}
+    .pill{font-size:11px;padding:5px 9px}
+    .controls{display:block;padding:7px 10px;margin-bottom:9px;border-radius:12px}
+    .quickBar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:31px}
+    .quickBarName{font-size:11px;font-weight:700;color:#97b4d1;margin-right:2px}
+    .quickBar button{min-height:30px;font-size:12px;padding:5px 9px;border-radius:7px}
+    .quickBar .centerChoice{background:#162e46;border-color:#405f7c;border-width:1px}
+    .quickBar .centerChoice.isCurrent{background:#276f9f;border-color:#6bc5fb;color:#fff}
+    .quickSummary{font-size:11px;color:#aec8de;margin-left:auto;white-space:nowrap}
+    #settingsToggle{background:transparent;border:1px solid #537595}
+    #settingsToggle[aria-expanded="true"]{background:#244b68}
+    .settingsForm{margin-top:8px;padding-top:9px;border-top:1px solid #37516d;align-items:flex-end;gap:8px}
+    .settingsForm[hidden]{display:none !important}
+    .settingField label{font-size:11px}
+    .settingField.coord{width:170px}
+    .settingInput{min-height:34px;padding:6px 8px;font-size:13px;border-radius:7px}
+    .settingsForm button{min-height:34px;padding:5px 10px;font-size:12px}
+    .settingsStatus{font-size:11px;margin-top:0}
+    .fr24Disclosure{width:auto;min-width:0;border:0;padding:0;position:relative;flex:0 0 auto}
+    .fr24Disclosure summary{min-height:30px;font-size:12px;gap:5px;padding:3px 6px;background:#162e46;border:1px solid #415e79;border-radius:7px}
+    .fr24Chip{font-size:10px;padding:2px 5px}
+    .fr24Inline{position:absolute;top:calc(100% + 8px);right:0;width:min(340px,90vw);z-index:10;
+      padding:12px;background:#14283e;border:1px solid #466482;border-radius:11px;box-shadow:0 12px 32px #0008}
+    .fr24Inline button{min-height:33px}
+    .layout{gap:11px;grid-template-columns:minmax(280px,.82fr) minmax(450px,1.63fr)}
+    .panel{padding:12px;border-radius:13px}
+    .sectionHead{margin-bottom:7px}
+    .sectionHead button{padding:5px 10px;min-height:33px;font-size:12px}
+    .stats{margin:6px 0 3px;gap:6px}
+    .stat{padding:6px 9px;min-width:90px}
+    .stat strong{font-size:19px}
+    .stat span{font-size:10px}
+    .foot{font-size:10px;margin-top:9px;line-height:1.45}
+
+    /* Każdy lot mieści się mniej więcej na wysokości miniatury i podpisu. */
+    .flight{display:grid;grid-template-columns:160px minmax(0,1fr);gap:11px;
+      align-items:stretch;padding:8px 9px;margin-bottom:7px;border-radius:11px}
+    .flightPhoto,.flightData{min-width:0}
+    .flightTop{margin:0;min-height:32px;gap:7px}
+    .flightTop strong{font-size:14px;line-height:1.1}
+    .flightIdentity{gap:6px}
+    .flightIdentity>div:last-child{min-width:0}
+    .company{font-size:11px;margin-top:1px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .dist{font-size:11px}
+    .logoWrap,.logoPlaceholder{width:52px;height:30px;flex:0 0 52px;border-radius:6px}
+    .logoWrap img{width:50px;height:28px}
+    .logoWrap .logoPlaceholder{width:52px;height:30px}
+    .aircraftPhoto>a,.photoPlaceholder{width:160px;height:105px;border-radius:7px}
+    .aircraftPhoto figcaption{width:160px;max-width:160px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;font-size:9px;margin-top:2px;line-height:1.2}
+    .photoPlaceholder{font-size:10px}
+    .flightData{display:flex;flex-direction:column;gap:3px;justify-content:space-between}
+    .routeStrip{margin:1px 0;grid-template-columns:minmax(0,1fr) 14px minmax(0,1fr);gap:4px}
+    .routeAirport{min-height:50px;padding:4px 7px;border-radius:7px}
+    .routeCaption{font-size:9px;letter-spacing:.04em;margin-bottom:2px}
+    .routePrimary{gap:5px;flex-wrap:nowrap}
+    .routeCode{font-size:17px;letter-spacing:0}
+    .routeCountry{font-size:9px;padding:1px 4px}
+    .routeAirportName{margin-top:2px;line-height:1.1;font-size:11px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .routeArrow{font-size:15px;align-self:center}
+    .routeUnknown{font-size:11px;margin-top:3px;line-height:1.2}
+    .routeUnavailable{margin:4px 0;padding:8px;font-size:11px}
+    .flightBottom{display:flex;align-items:center;flex-wrap:wrap;gap:2px 9px;font-size:11px;line-height:1.2}
+    .microStat{white-space:nowrap}
+    .microLabel{color:#92aac6;margin-right:3px}
+    .microValue{color:#f1f7ff;font-weight:680}
+    .flightData [data-role="alt"], .flightData [data-role="speed"]{display:inline}
+    @media(max-width:1050px){.layout{grid-template-columns:1fr}.radar{max-width:390px}}
+    @media(max-width:720px){.quickSummary{display:none}.header{align-items:center}
+      .routeStrip{grid-template-columns:minmax(0,1fr) 14px minmax(0,1fr);gap:4px}
+      .routeArrow{font-size:15px;transform:none;line-height:normal}
+      .flight{grid-template-columns:155px minmax(0,1fr)}
+      .aircraftPhoto>a,.photoPlaceholder{width:155px}
+      .aircraftPhoto figcaption{width:155px;max-width:155px}}
+    @media(max-width:480px){body{padding:7px}.panel{padding:9px}.controls{padding:6px}
+      .sub{display:none}.header h1{font-size:19px}.quickBar{gap:4px}
+      .quickBar button{font-size:11px;padding:4px 7px}
+      .flight{grid-template-columns:105px minmax(0,1fr);gap:7px;padding:7px}
+      .aircraftPhoto>a,.photoPlaceholder{width:105px;height:83px}
+      .aircraftPhoto figcaption{width:105px;max-width:105px;font-size:8px}
+      .flightTop{align-items:flex-start}.flightTop strong{font-size:12px}
+      .logoWrap,.logoPlaceholder{width:35px;height:25px;flex:0 0 35px}
+      .logoWrap img{width:33px;height:23px}
+      .logoWrap .logoPlaceholder{width:35px;height:25px}
+      .dist{font-size:10px;white-space:normal;text-align:right}
+      .company{font-size:10px;max-width:90px}
+      .routeStrip{grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);gap:3px}
+      .routeAirport{padding:4px;min-height:48px}
+      .routeCode{font-size:13px}.routeCountry{font-size:8px}
+      .routeAirportName{font-size:9px}.routeCaption{font-size:8px}
+      .flightBottom{font-size:10px;gap:2px 6px}
+    }
   </style>
 </head>
 <body>
@@ -154,7 +253,22 @@
   </header>
 
   <nav class="controls" aria-label="Ustawienia radaru">
-    <form class="settingsForm" id="settingsForm" novalidate>
+    <div class="quickBar">
+      <span class="quickBarName">Środek:</span>
+      <button type="button" class="centerChoice" id="restoreCenter">Zaborów</button>
+      <button type="button" class="centerChoice" id="centerApartment">Mieszkanie</button>
+      <button type="button" class="centerChoice" id="centerWork">Praca</button>
+      <span class="quickSummary" id="quickSummary">Promień 10 km · co 3 s przy ruchu</span>
+      <button type="button" id="settingsToggle" aria-controls="settingsForm" aria-expanded="false">⚙ Ustawienia</button>
+      <details class="fr24Disclosure" id="fr24Config">
+        <summary>Trasy FR24 <span class="fr24Chip" id="fr24Chip">Wyłączone</span></summary>
+        <div class="fr24Inline">
+          <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
+          <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone</span>
+        </div>
+      </details>
+    </div>
+    <form class="settingsForm" id="settingsForm" novalidate hidden>
       <div class="settingField radius">
         <label for="radiusInput">Promień (km)</label>
         <input class="settingInput" id="radiusInput" type="text" inputmode="decimal" autocomplete="off" value="10" maxlength="6">
@@ -168,28 +282,16 @@
         <input class="settingInput" id="longitudeInput" type="text" inputmode="decimal" autocomplete="off" value="20.68608333" aria-describedby="coordsHint">
       </div>
       <div class="settingField interval">
-        <label for="activeIntervalInput">Gdy leci samolot (s)</label>
+        <label for="activeIntervalInput">Odświeżanie (s)</label>
         <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="3" max="300" step="1" value="3">
       </div>
-      <div class="settingsActions">
-        <button type="submit">Zastosuj</button>
-        <button type="button" class="secondaryButton" id="restoreCenter">Środek: Zaborów</button>
-        <button type="button" class="secondaryButton" id="centerApartment">Środek: Mieszkanie</button>
-        <button type="button" class="secondaryButton" id="centerWork">Środek: Praca</button>
-      </div>
+      <div class="settingsActions"><button type="submit">Zastosuj</button></div>
       <span id="settingsError" class="settingsError" role="alert" aria-live="polite"></span>
       <div class="settingsStatus">
-        <span id="coordsHint" class="hint">Współrzędne dziesiętne lub stopnie, minuty i sekundy (np. 52 15 46,6).</span>
+        <span id="coordsHint" class="hint">Współrzędne dziesiętne lub stopnie/minuty/sekundy (np. 52 15 46,6).</span>
         <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
       </div>
     </form>
-    <details class="fr24Disclosure" id="fr24Config">
-      <summary>Trasy Flightradar24 <span class="fr24Chip" id="fr24Chip">Wyłączone</span></summary>
-      <div class="fr24Inline">
-        <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
-        <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone</span>
-      </div>
-    </details>
   </nav>
   <main class="layout">
     <section class="panel" aria-label="Radar pozycji">
@@ -350,24 +452,34 @@ function photoHTML(f) {
     <figcaption>${escapeHtml(photo.photographer ? '© ' + photo.photographer : 'Fotografia')}
       · ${escapeHtml(photo.source || 'Źródło zdjęcia')}</figcaption></figure>`;
 }
+function compactMetric(label, value, role = '') {
+  return `<span class="microStat"><span class="microLabel">${escapeHtml(label)}:</span>`
+    + `<strong class="microValue"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</strong></span>`;
+}
 function flightCard(f) {
-  const near = f.km <= 10, company = flightDetails(f);
+  const near = f.km <= 10;
+  const company = flightDetails(f);
   const distance = `${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}`;
-  const hasRoute = Boolean(f.from?.code || f.to?.code);
   return `<article class="flight" data-flight-key="${escapeHtml(k(f))}">
-    <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
-      <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
-      <div class="company">${escapeHtml(company.name)}</div></div></div>
-      <span class="dist ${near ? 'near' : ''}" data-role="dist">${distance}</span></div>
-    <div class="flightMain"><div>${photoHTML(f)}</div><div class="flightData">
-      <div class="fields">
-        ${field('Samolot', f.model)}${field('Rejestracja', f.registration)}
-        ${f.flight_number ? field('Numer rejsu', f.flight_number) : ''}
-        ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
-        ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
+    <div class="flightPhoto">${photoHTML(f)}</div>
+    <div class="flightData">
+      <div class="flightTop">
+        <div class="flightIdentity">${logoHTML(f)}<div>
+          <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
+          <div class="company">${escapeHtml(company.name)}</div>
+        </div></div>
+        <span class="dist ${near ? 'near' : ''}" data-role="dist">${distance}</span>
       </div>
       ${routeHTML(f)}
-    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${f.route_source === 'Flightradar24 API' ? 'bieżący rejs FR24' : 'dane niezweryfikowane'}${!f.from?.code || !f.to?.code ? ' · trasa niepełna' : ''}</div>` : ''}</article>`;
+      <div class="flightBottom">
+        ${compactMetric('Typ', f.model)}
+        ${compactMetric('Rej.', f.registration)}
+        ${f.flight_number ? compactMetric('Rejs', f.flight_number) : ''}
+        ${compactMetric('Wys.', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
+        ${compactMetric('Pręd.', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
+      </div>
+    </div>
+  </article>`;
 }
 
 let radius = 10;
@@ -390,6 +502,12 @@ el('longitudeInput').value = formatCoord(center.lon);
 el('activeIntervalInput').value = String(activeMs / 1000);
 function renderCenter() {
   const label = centerLabel(center);
+  for (const [name, id] of [['Zaborów','restoreCenter'], ['Mieszkanie','centerApartment'], ['Praca','centerWork']]) {
+    const selected = name === label;
+    el(id).classList.toggle('isCurrent', selected);
+    el(id).setAttribute('aria-pressed', String(selected));
+  }
+  el('quickSummary').textContent = `Promień ${radius.toLocaleString('pl-PL')} km · ${activeMs / 1000} s przy ruchu`;
   const display = `${formatCoord(center.lat)}°, ${formatCoord(center.lon)}°`;
   el('centerSubtitle').textContent = `Samoloty · ${label} · ${display}`;
   el('radarCenterName').textContent = label === 'Własny środek' ? 'Środek' : label;
@@ -806,6 +924,13 @@ function applySettings(newRadius, newCenter, newMs) {
   radarPoints();
   void pollPositions();
 }
+el('settingsToggle').addEventListener('click', () => {
+  const form = el('settingsForm');
+  const expanded = form.hidden;
+  form.hidden = !expanded;
+  el('settingsToggle').setAttribute('aria-expanded', String(expanded));
+  el('settingsToggle').textContent = expanded ? '⚙ Ukryj ustawienia' : '⚙ Ustawienia';
+});
 el('settingsForm').addEventListener('submit', event => {
   event.preventDefault();
   const rawRadius = el('radiusInput').value.trim().replace(',', '.');
