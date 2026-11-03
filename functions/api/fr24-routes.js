@@ -14,7 +14,7 @@ const HEADERS = {
   'x-content-type-options':'nosniff'
 };
 const AIRPORTS = Object.freeze({
-  WAW:['Warszawa-Chopin','POL'], WMI:['Warszawa-Modlin','POL'], KRK:['Kraków-Balice','POL'],
+  WAW:['Warszawa-Chopin','POL'], WMI:['Warszawa-Modlin','POL'], EPBC:['Warszawa-Babice','POL'], KRK:['Kraków-Balice','POL'],
   SZZ:['Szczecin-Goleniów','POL'], GDN:['Gdańsk','POL'], WRO:['Wrocław','POL'],
   KTW:['Katowice','POL'], POZ:['Poznań-Ławica','POL'], RZE:['Rzeszów','POL'],
   FRA:['Frankfurt nad Menem','DEU'], MUC:['Monachium','DEU'], BER:['Berlin-Brandenburg','DEU'],
@@ -79,13 +79,16 @@ function matchesLive(row, a, now) {
 function fromFlight(row) {
   const from = airport(row.orig_iata, row.orig_icao || row.origin_icao);
   const to = airport(row.dest_iata, row.dest_icao || row.destination_icao);
-  if (!from || !to || from.code === to.code) return null;
+  // FR24 czasem zna tylko lotnisko startowe (np. EPBC/Babice).
+  // Zachowujemy każdą znaną stronę trasy, zamiast kasować cały rekord.
+  if (!from && !to) return null;
   return { from, to, flight_number: norm(row.flight) || null,
-    route_source:'Flightradar24 API', route_status:'bieżący rejs (FR24)' };
+    route_source:'Flightradar24 API',
+    route_status: from && to ? 'bieżący rejs (FR24)' : 'bieżący rejs (FR24) – trasa niepełna' };
 }
 function cacheRequest(a, ctx) {
   const key = [a.callsign,a.hex||'nohex',a.registration||'noreg'].join('/');
-  return new Request(new URL('/__fr24_routes_live_v12/'+key,ctx.request.url));
+  return new Request(new URL('/__fr24_routes_live_v14/'+key,ctx.request.url));
 }
 async function getCache(a,ctx) {
   try {
