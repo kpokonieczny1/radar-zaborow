@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 13.0 · ADS-B + trasy FR24</title>
+  <title>Radar Zaborów 14.0 · ADS-B + trasy FR24</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -18,7 +18,18 @@
     .pill.bad{color:#ffaaa6;border-color:#895352}
     .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#122238;border:1px solid #2e4764;border-radius:16px;padding:12px 15px;margin-bottom:16px}
     .controls .name{color:#bbd4eb;font-size:14px;font-weight:600}
-    .fr24Inline{width:100%;border-top:1px solid #344d69;padding-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    /* Zwijany, kompaktowy panel konfiguracji FR24. */
+    .fr24Disclosure{width:100%;border-top:1px solid #344d69;padding:5px 0 0;min-width:0}
+    .fr24Disclosure summary{display:flex;align-items:center;gap:10px;cursor:pointer;
+      min-height:32px;padding:2px 4px;color:#bbd4eb;font-size:13px;font-weight:650;list-style:none}
+    .fr24Disclosure summary::-webkit-details-marker{display:none}
+    .fr24Disclosure summary::before{content:'▸';color:#89b9dd;transition:transform .15s}
+    .fr24Disclosure[open] summary::before{transform:rotate(90deg)}
+    .fr24Disclosure summary:focus-visible{outline:2px solid #97dbff;outline-offset:2px;border-radius:6px}
+    .fr24Chip{background:#23364c;border:1px solid #3c5671;border-radius:6px;
+      padding:3px 8px;color:#b1c9df;font-size:11px;font-weight:600}
+    .fr24Chip.active{background:#174033;border-color:#337d65;color:#89e7be}
+    .fr24Inline{padding:8px 4px 7px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 
     .fr24Info{color:#adbed4;display:block;font-size:12px;margin-top:7px}
     .fr24Info.active{color:#86e0b5}
@@ -49,8 +60,15 @@
     .radar .ring{fill:none;stroke:#315779;stroke-width:1.2}
     .radar .zone{fill:#267457;fill-opacity:.12;stroke:#4caa8e;stroke-width:1.6;stroke-dasharray:5 4}
     .radar .axis{stroke:#294763;stroke-width:1}
-    .radar .dot{fill:#70baff;stroke:#d9f1ff;stroke-width:1.2}
-    .radar .dot.near{fill:#65e4ac;stroke:#d9fff4}
+    /* Sylwetka jest skierowana nosem ku górze, a obrót odzwierciedla track 0–359°.
+       Przy braku kierunku pokazujemy znak zapytania, nie sugerujemy kursu północnego. */
+    .radar .aircraftSymbol{fill:#6bb9ff;stroke:#0a2741;stroke-width:1.15;stroke-linejoin:round}
+    .radar .aircraftSymbol.near{fill:#65e4ac;stroke:#103f37}
+    .radar .headingUnknown{fill:#1c4867;stroke:#abd5f3;stroke-width:1.4}
+    .radar .headingUnknown.near{fill:#1c6852;stroke:#bbffe1}
+    .radar .unknownMark{font-weight:800;fill:#fff;font-size:10px;text-anchor:middle}
+    .radar .radarLegend{font-size:11px}
+    .radarLegend{display:flex;gap:13px;flex-wrap:wrap;color:#a7bdd1;font-size:11px;margin-top:4px}
     .radar text{font-size:11px;fill:#a5c4dc}
     .radar .planeLabel{font-size:12px;fill:#e9f7ff;paint-order:stroke;stroke:#102a38;stroke-width:3px;stroke-linejoin:round}
     .meta{display:flex;justify-content:space-between;gap:10px;color:#a7bdd1;font-size:12px;flex-wrap:wrap;margin-top:4px}
@@ -107,6 +125,8 @@
       padding:11px 12px;min-width:0;min-height:94px}
     .routeAirport.origin{border-left:4px solid #6bbaff}
     .routeAirport.destination{border-left:4px solid #62d7a5}
+    .routeAirport.unknown{border-left-color:#677e98;opacity:.9}
+    .routeUnknown{color:#b8cee2;font-size:13px;font-weight:650;line-height:1.4;margin-top:8px}
     .routeCaption{display:block;color:#a7bfd9;font-size:11px;font-weight:700;letter-spacing:.08em;
       text-transform:uppercase;margin-bottom:7px}
     .routePrimary{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -163,10 +183,13 @@
         <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
       </div>
     </form>
-    <div class="fr24Inline" id="fr24Config">
-      <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
-      <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone</span>
-    </div>
+    <details class="fr24Disclosure" id="fr24Config">
+      <summary>Trasy Flightradar24 <span class="fr24Chip" id="fr24Chip">Wyłączone</span></summary>
+      <div class="fr24Inline">
+        <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
+        <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone</span>
+      </div>
+    </details>
   </nav>
   <main class="layout">
     <section class="panel" aria-label="Radar pozycji">
@@ -184,6 +207,7 @@
         <text id="radarCenterName" x="211" y="212">Zaborów</text>
         <g id="dots"></g>
       </svg>
+      <div class="radarLegend"><span>✈ Nosem wskazuje kierunek lotu</span><span>ⓘ Znak ? – brak danych o kierunku</span></div>
       <div class="stats" id="radarStats">
         <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
         <div class="stat"><strong id="allCount">—</strong><span>W wybranym zasięgu</span></div>
@@ -267,21 +291,28 @@ function field(label, value, role = '') {
 }
 function routeAirportHTML(airport, direction) {
   const departure = direction === 'origin';
-  const details = airportLookup(airport);
-  const code = details.code;
-  const country = /^[A-Z]{3}$/.test(details.country_iso3 || '') ? details.country_iso3 : '';
   const label = departure ? 'Wylot' : 'Przylot';
-  const name = details.name || 'Nazwa lotniska nieznana';
-  return `<div class="routeAirport ${departure ? 'origin' : 'destination'}">
+  const side = departure ? 'origin' : 'destination';
+  // FR24 może znać tylko port startowy (np. EPBC, Warszawa-Babice).
+  // Wtedy zachowujemy ten port, a brakującej połowy trasy NIE zgadujemy.
+  if (!airport?.code) {
+    const message = departure ? 'Lotnisko wylotu nieznane' : 'Lotnisko docelowe nieznane';
+    return `<div class="routeAirport ${side} unknown">
+      <span class="routeCaption">${label}</span>
+      <div class="routeUnknown">${message}</div></div>`;
+  }
+  const details = airportLookup(airport);
+  const country = /^[A-Z]{3}$/.test(details.country_iso3 || '') ? details.country_iso3 : '';
+  return `<div class="routeAirport ${side}">
     <span class="routeCaption">${label}</span>
-    <div class="routePrimary"><strong class="routeCode">${escapeHtml(code)}</strong>
+    <div class="routePrimary"><strong class="routeCode">${escapeHtml(details.code)}</strong>
       ${country ? `<span class="routeCountry" title="Kod kraju ISO 3166-1 alpha-3">${escapeHtml(country)}</span>` : ''}
     </div>
-    <div class="routeAirportName">${escapeHtml(name)}</div></div>`;
+    <div class="routeAirportName">${escapeHtml(details.name || 'Nazwa lotniska nieznana')}</div></div>`;
 }
 function routeHTML(f) {
-  if (!f.from || !f.to) return `<div class="routeUnavailable">${fr24Active ? 'FR24: trwa wyszukiwanie lub brak potwierdzonej trasy' : 'Trasa nieustalona'}</div>`;
-  return `<div class="routeStrip" aria-label="Trasa lotu">
+  if (!f.from?.code && !f.to?.code) return `<div class="routeUnavailable">${fr24Active ? 'FR24: trwa wyszukiwanie lub brak danych o trasie' : 'Trasa nieustalona'}</div>`;
+  return `<div class="routeStrip" aria-label="Trasa lotu${!f.to?.code ? ' – cel nieznany' : ''}">
     ${routeAirportHTML(f.from, 'origin')}
     <span class="routeArrow" aria-hidden="true">➜</span>
     ${routeAirportHTML(f.to, 'destination')}
@@ -322,7 +353,7 @@ function photoHTML(f) {
 function flightCard(f) {
   const near = f.km <= 10, company = flightDetails(f);
   const distance = `${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}`;
-  const hasRoute = f.from && f.to;
+  const hasRoute = Boolean(f.from?.code || f.to?.code);
   return `<article class="flight" data-flight-key="${escapeHtml(k(f))}">
     <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
       <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
@@ -336,7 +367,7 @@ function flightCard(f) {
         ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
       </div>
       ${routeHTML(f)}
-    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${f.route_source === 'Flightradar24 API' ? 'bieżący rejs FR24' : 'dane niezweryfikowane'}</div>` : ''}</article>`;
+    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${f.route_source === 'Flightradar24 API' ? 'bieżący rejs FR24' : 'dane niezweryfikowane'}${!f.from?.code || !f.to?.code ? ' · trasa niepełna' : ''}</div>` : ''}</article>`;
 }
 
 let radius = 10;
@@ -386,7 +417,9 @@ let fr24Active = Boolean(fr24Pin);
 let fr24Busy = false;
 let fr24Abort = null;
 let fr24Routes = new Map();
-const airportDirectory = new Map();
+const airportDirectory = new Map([
+  ['EPBC', {name:'Warszawa-Babice', country_iso3:'POL'}],
+]);
 const airportLookupAt = new Map();
 let airportLookupBusy = false;
 try {
@@ -438,8 +471,25 @@ function radarPoints() {
     const dy = (f.lat - center.lat) * 111.2;
     const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
     if (Math.hypot(x - 200, y - 200) > 178) continue;
-    svg += `<g><circle class="dot ${f.km <= 10 ? 'near' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>
-      <text class="planeLabel" x="${(x+8).toFixed(1)}" y="${(y-7).toFixed(1)}">${escapeHtml(f.flight || f.registration || '✈')}</text></g>`;
+    const px = x.toFixed(1), py = y.toFixed(1);
+    const near = f.km <= 10;
+    // W ADS-B track jest kursem względem północy, zgodnym z orientacją radaru.
+    // Brak track => nie obracamy ikony 'na północ', lecz oznaczamy kurs jako nieznany.
+    const hasHeading = typeof f.track === 'number' && Number.isFinite(f.track);
+    const heading = hasHeading ? ((f.track % 360) + 360) % 360 : null;
+    const marker = hasHeading
+      ? `<g transform="translate(${px} ${py}) rotate(${heading.toFixed(1)})">
+           <path class="aircraftSymbol ${near ? 'near' : ''}"
+             d="M0 -15 C2 -15 3 -12 3 -8 L3 -5 L12 0 L12 3 L3 1.5 L3 9 L7 12 L7 14 L0 12 L-7 14 L-7 12 L-3 9 L-3 1.5 L-12 3 L-12 0 L-3 -5 L-3 -8 C-3 -12 -2 -15 0 -15 Z"/>
+         </g>`
+      : `<g transform="translate(${px} ${py})">
+           <circle class="headingUnknown ${near ? 'near' : ''}" r="8"/>
+           <text class="unknownMark" y="3.5">?</text>
+         </g>`;
+    const identity = f.flight || f.registration || f.hex || 'Statek powietrzny';
+    svg += `<g><title>${escapeHtml(identity)} · ${f.km} km · ${heading === null ? 'kurs nieznany' : `kurs ${Math.round(heading)}°`}</title>
+      ${marker}
+      <text class="planeLabel" x="${(x+14).toFixed(1)}" y="${(y-10).toFixed(1)}">${escapeHtml(f.flight || f.registration || '')}</text></g>`;
   }
   el('dots').innerHTML = svg;
 }
@@ -552,6 +602,9 @@ function fr24Key(f) {
 function setFr24Info(message, active=false) {
   el('fr24Info').textContent = message;
   el('fr24Info').className = 'fr24Info' + (active ? ' active' : '');
+  // Stan widoczny nawet wtedy, gdy panel konfiguracji FR24 jest zwinięty.
+  el('fr24Chip').textContent = fr24Active ? 'Aktywne' : 'Wyłączone';
+  el('fr24Chip').classList.toggle('active', fr24Active);
 }
 async function enrichAirports() {
   if (airportLookupBusy || document.hidden) return;
@@ -620,7 +673,7 @@ async function enrichRoutesIfNeeded(epoch) {
     for (const plane of candidates) {
       const key = fr24Key(plane);
       const route = json.routes?.[String(plane.flight).toUpperCase()];
-      if (route?.from?.code && route?.to?.code) {
+      if (route?.from?.code || route?.to?.code) {
         fr24Routes.set(key, route);
         fr24Attempts.set(key, {time:Date.now(), hit:true});
         found++;
