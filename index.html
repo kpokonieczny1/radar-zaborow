@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 10.0 · ADS-B i FR24 Sandbox</title>
+  <title>Radar Zaborów 12.0 · ADS-B + trasy FR24</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -27,6 +27,14 @@
     .sandboxRadarText{min-height:220px;display:grid;place-content:center;text-align:center;color:#e5d09d;line-height:1.6}
     .sandboxRadarText[hidden]{display:none!important}
     .modeHelp{font-size:12px;color:#aac5dd}
+    .fr24Config{width:100%;border-top:1px solid #344d69;padding-top:9px;color:#bed6ec;font-size:13px}
+    .fr24Config summary{cursor:pointer;font-weight:700;color:#d4e9fb;list-style:auto}
+    .fr24Control{display:flex;align-items:end;gap:9px;flex-wrap:wrap;margin-top:10px}
+    .fr24Control label{display:flex;flex-direction:column;gap:4px;font-size:12px}
+    .fr24Control input{min-height:39px;max-width:240px;padding:8px 10px;border:1px solid #587ba0;background:#091828;color:white;border-radius:9px;font:inherit;font-size:15px}
+    .fr24Control .hint{max-width:650px;line-height:1.45}
+    .fr24Info{color:#adbed4;display:block;font-size:12px;margin-top:7px}
+    .fr24Info.active{color:#86e0b5}
     
     button{cursor:pointer;background:#276f9f;border:1px solid transparent;color:white;font:inherit;padding:9px 14px;border-radius:10px;min-height:41px}
     button:hover{background:#3784bb}
@@ -174,6 +182,17 @@
         <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
       </div>
     </form>
+    <details class="fr24Config" id="fr24Config">
+      <summary>Trasy Flightradar24 – aktualne rejsy</summary>
+      <div class="fr24Control">
+        <label for="fr24Pin">Prywatny kod dostępu do integracji
+          <input id="fr24Pin" type="password" autocomplete="off" placeholder="Ustawiony w Cloudflare" minlength="8">
+        </label>
+        <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
+        <span class="hint">To nie jest token FR24, tylko Twój prywatny PIN z Cloudflare. Integracja produkcyjna wymaga uprawnienia FR24 do łączenia danych.</span>
+      </div>
+      <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone. Możesz je włączyć prywatnym PIN-em.</span>
+    </details>
   </nav>
 
   <div class="sandboxBanner" id="sandboxBanner" hidden role="note">
@@ -218,8 +237,8 @@
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
     ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
     Kraj lotniska: kod ISO 3166-1 alpha-3, jeśli udostępnia go baza danych.
-    Trasy ADS-B są orientacyjne i nie stanowią potwierdzonego planu lotu.
-    FR24 Sandbox to oddzielny tryb z danymi stałymi. W trybie testowym nie łączymy danych FR24 z pozycjami ADS-B.
+    Trasy z FR24 po aktywacji dotyczą bieżących rejsów; bez FR24 dane o trasach są orientacyjne.
+    FR24 Sandbox to oddzielny tryb z danymi stałymi. Opcjonalne wzbogacanie tras o FR24 jest domyślnie zablokowane; wymaga zgody FR24 i produkcyjnego tokenu.
     Przy wygaszonym ekranie tablet może wstrzymywać odświeżanie.
   </footer>
 
@@ -289,7 +308,7 @@ function routeAirportHTML(airport, direction) {
     <div class="routeAirportName">${escapeHtml(name)}</div></div>`;
 }
 function routeHTML(f) {
-  if (!f.from || !f.to) return '<div class="routeUnavailable">Trasa nieustalona</div>';
+  if (!f.from || !f.to) return `<div class="routeUnavailable">${fr24Active && dataMode === 'adsb' ? 'FR24: trwa wyszukiwanie lub brak potwierdzonej trasy' : 'Trasa nieustalona'}</div>`;
   return `<div class="routeStrip" aria-label="Trasa lotu">
     ${routeAirportHTML(f.from, 'origin')}
     <span class="routeArrow" aria-hidden="true">➜</span>
@@ -346,7 +365,7 @@ function flightCard(f) {
         ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
       </div>
       ${routeHTML(f)}
-    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${sandbox ? 'przykładowe dane testowe' : 'dane niezweryfikowane'}</div>` : ''}</article>`;
+    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${sandbox ? 'przykładowe dane testowe' : f.route_source === 'Flightradar24 API' ? 'bieżący rejs FR24' : 'dane niezweryfikowane'}</div>` : ''}</article>`;
 }
 
 let dataMode = 'adsb';
@@ -387,11 +406,35 @@ let lastDetailAttempt = 0;
 let requestEpoch = 0;
 let pollSerial = 0;
 let cardKeys = '';
+// Trasy FR24 nie są odpytywane podczas pobierania pozycji (3 s).
+// Kod dostępu istnieje wyłącznie w pamięci tej karty przeglądarki.
+let fr24Active = false;
+let fr24Pin = '';
+let fr24Busy = false;
+let fr24Abort = null;
+let fr24Routes = new Map();
+let fr24Attempts = new Map();
+const FR24_SUCCESS_MS = 30 * 60 * 1000;
+const FR24_MISS_MS = 5 * 60 * 1000;
+let fr24LastBatch = 0;
+const FR24_BATCH_INTERVAL_MS = 15000;
 
 function merged(plane) {
-  const m = meta.get(k(plane));
-  return m ? { ...plane, ...m, lat:plane.lat, lon:plane.lon, km:plane.km,
-    altitude_m:plane.altitude_m, speed_kmh:plane.speed_kmh, track:plane.track } : plane;
+  const base = {
+    ...plane, ...(meta.get(k(plane)) || {}),
+    lat:plane.lat, lon:plane.lon, km:plane.km,
+    altitude_m:plane.altitude_m, speed_kmh:plane.speed_kmh, track:plane.track,
+  };
+  // FR24 zmienia TYLKO dane trasy i numer rejsu — nie dotyka zdjęć,
+  // modeli, wysokości, logo, prędkości ani pozycji ADS-B.
+  if (!fr24Active || dataMode !== 'adsb') return base;
+  const route = fr24Routes.get(`${k(plane)}|${String(plane.flight || '').toUpperCase()}`);
+  // W trybie FR24 nie pokazujemy starej, potencjalnie błędnej trasy z baz ADS-B.
+  return route ? {...base, ...route} : {
+    ...base, from: null, to: null, route_source: null,
+    route_status: 'FR24: oczekiwanie na trasę lub brak dopasowania',
+    flight_number: null,
+  };
 }
 function radarPoints() {
   el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
@@ -507,9 +550,96 @@ async function enrichIfNeeded(epoch) {
     // Ograniczamy pamięć tabletu po wielu godzinach pracy.
     if (meta.size > 250) meta = new Map([...meta].slice(-150));
     paintCards(true);
+    void enrichRoutesIfNeeded(epoch);
   } catch { /* dane pozycyjne będą działać niezależnie od metadanych */ }
   finally { detailInFlight = false; }
 }
+function fr24Key(f) {
+  return `${k(f)}|${String(f.flight || '').toUpperCase()}`;
+}
+function setFr24Info(message, active=false) {
+  el('fr24Info').textContent = message;
+  el('fr24Info').className = 'fr24Info' + (active ? ' active' : '');
+}
+async function enrichRoutesIfNeeded(epoch) {
+  if (!fr24Active || fr24Busy || document.hidden || dataMode !== 'adsb') return;
+  const now = Date.now();
+  if (now - fr24LastBatch < FR24_BATCH_INTERVAL_MS) return;
+  const candidates = current.filter(f => /^[A-Z0-9]{3,10}$/.test(f.flight || '')
+    && (!fr24Attempts.has(fr24Key(f)) || now - fr24Attempts.get(fr24Key(f)).time >
+       (fr24Attempts.get(fr24Key(f)).hit ? FR24_SUCCESS_MS : FR24_MISS_MS))).slice(0,10);
+  if (!candidates.length) return;
+  fr24Busy = true;
+  fr24LastBatch = now;
+  fr24Abort = new AbortController();
+  // Zaznacz próbę przed rozpoczęciem pobierania, aby szybkie odświeżanie
+  // co 3 s nie uruchomiło drugiego zapytania równolegle.
+  for (const plane of candidates) fr24Attempts.set(fr24Key(plane), {time:now, hit:false});
+  setFr24Info('Sprawdzanie tras w FR24…', true);
+  try {
+    const response = await fetch('/api/fr24-routes', {
+      method:'POST', cache:'no-store', signal:fr24Abort.signal,
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({pin:fr24Pin, aircraft:candidates.map(f => ({
+        callsign:f.flight,hex:f.hex,registration:f.registration,
+      }))}),
+    });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error || `FR24 HTTP ${response.status}`);
+    if (epoch !== requestEpoch || !fr24Active || dataMode !== 'adsb') return;
+    let found = 0;
+    for (const plane of candidates) {
+      const key = fr24Key(plane);
+      const route = json.routes?.[String(plane.flight).toUpperCase()];
+      if (route?.from?.code && route?.to?.code) {
+        fr24Routes.set(key, route);
+        fr24Attempts.set(key, {time:Date.now(), hit:true});
+        found++;
+      }
+    }
+    if (fr24Routes.size > 150) fr24Routes = new Map([...fr24Routes].slice(-100));
+    if (fr24Attempts.size > 200) fr24Attempts = new Map([...fr24Attempts].slice(-150));
+    setFr24Info(`FR24 aktywne · ${found} nowych tras · pozycje z ADS-B`, true);
+    if (found) paintCards(true);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    setFr24Info(`FR24: ${error.message}. Pozycje ADS-B nadal działają.`);
+    // Nie ponawiamy co 3 s po błędzie autoryzacji lub brakującej zgody.
+    if (/nieaktywna|Brak konfiguracji|kod dostępu|uprawnień/i.test(error.message)) {
+      fr24Active = false;
+      el('fr24Toggle').textContent = 'Włącz trasy FR24';
+      fr24Pin = '';
+      el('fr24Pin').value = '';
+    }
+  } finally { fr24Busy = false; fr24Abort = null; }
+}
+
+el('fr24Toggle').addEventListener('click', () => {
+  if (fr24Active) {
+    fr24Active = false;
+    fr24Pin = '';
+    el('fr24Pin').value = '';
+    el('fr24Toggle').textContent = 'Włącz trasy FR24';
+    if (fr24Abort) fr24Abort.abort();
+    fr24Routes.clear(); fr24Attempts.clear();
+    setFr24Info('FR24 wyłączone · wyświetlane są orientacyjne trasy z innych baz.');
+    paintCards(true);
+    return;
+  }
+  const pin = el('fr24Pin').value;
+  if (pin.length < 8) {
+    setFr24Info('Wpisz swój prywatny kod dostępu (minimum 8 znaków).');
+    return;
+  }
+  fr24Pin = pin;
+  el('fr24Pin').value = '';
+  fr24Active = true;
+  paintCards(true);
+  el('fr24Toggle').textContent = 'Wyłącz trasy FR24';
+  setFr24Info('FR24: szukam tras aktualnie śledzonych samolotów…', true);
+  void enrichRoutesIfNeeded(requestEpoch);
+});
+
 async function fetchSandbox() {
   if (document.hidden || dataMode !== 'fr24-sandbox') return;
   const epoch = requestEpoch;
@@ -546,8 +676,10 @@ function changeDataMode(next) {
   clearTimeout(timer);
   if (positionAbort) positionAbort.abort();
   if (detailAbort) detailAbort.abort();
+  if (fr24Abort) fr24Abort.abort();
   current = [];
   meta.clear();
+  fr24Routes.clear(); fr24Attempts.clear();
   cardKeys = '';
   detailInFlight = false;
   lastDetailAttempt = 0;
@@ -558,6 +690,7 @@ function changeDataMode(next) {
   el('radarStats').hidden = sandbox;
   el('radarMeta').hidden = sandbox;
   el('settingsForm').hidden = sandbox;
+  el('fr24Config').hidden = sandbox;
   el('modeHelp').textContent = sandbox ? 'Przykładowe rekordy · bez filtrów lokalizacji' :
     'Samoloty w pobliżu wybranego punktu';
   el('listTitle').textContent = sandbox ? 'Przykładowe loty FR24' : 'Aktualne loty';
@@ -587,6 +720,7 @@ async function pollPositions() {
     el('status').textContent = `● Radar działa · ${data.source || 'ADS-B'}`;
     el('status').className = 'pill';
     void enrichIfNeeded(epoch);
+    void enrichRoutesIfNeeded(epoch);
   } catch (error) {
     if (epoch !== requestEpoch || serial !== pollSerial || error.name === 'AbortError') return;
     el('status').textContent = '⚠ Brak połączenia';
@@ -627,9 +761,11 @@ function applySettings(newRadius, newCenter, newMs) {
   cardKeys = '';
   current = [];
   meta.clear();
+  fr24Routes.clear(); fr24Attempts.clear();
   lastDetailAttempt = 0;
   if (positionAbort) positionAbort.abort();
   if (detailAbort) detailAbort.abort();
+  if (fr24Abort) fr24Abort.abort();
   el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego środka radaru…</div>';
   el('count').textContent = '—';
   el('nearCount').textContent = '—';
@@ -672,6 +808,7 @@ document.addEventListener('visibilitychange', () => {
     clearTimeout(timer);
     if (positionAbort) positionAbort.abort();
     if (detailAbort) detailAbort.abort();
+    if (fr24Abort) fr24Abort.abort();
   } else {
     if (dataMode === 'fr24-sandbox') void fetchSandbox();
     else void pollPositions();

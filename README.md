@@ -1,50 +1,49 @@
-# Radar Zaborów 10.0 – ADS-B na żywo + Flightradar24 Sandbox
+# Radar Zaborów 12.0 — aktualne trasy FR24
 
-Projekt Cloudflare Pages. Domyślne centrum: 52.26294444° N, 20.68608333° E.
+Pliki przeznaczone do **Cloudflare Pages (GitHub)**. Jest to aktualizacja wersji 11.0.
 
-## Co zostało dodane
+## Co robi wersja 12
 
-Przełącznik źródła: **ADS-B (rzeczywiste loty)** oraz **FR24 Sandbox (dane przykładowe)**.
+- Pozycje, zdjęcia, logo, promień, współrzędne i odświeżanie 3 s: bez zmian, z ADS-B.
+- Po aktywacji: trasy i numery rejsów z **produkcyjnego Flightradar24**.
+- Trasy są pobierane przez Cloudflare **tylko po wykryciu nowego samolotu**, jedną paczką do 10 znaków wywoławczych.
+- Endpoint **`/api/live/flight-positions/full` z filtrem `callsigns`** zapewnia bieżące trasy (bardziej aktualne niż lista historycznych przypisań).
+- Sprawdzenie `callsign`, a gdy są dostępne również `hex` i `reg`. W razie braku trasy FR24 nie prezentujemy trasy z alternatywnych baz jako wyniku FR24.
+- Po stronie przeglądarki ponowienie dla nieznanej trasy nie częściej niż po 5 minutach; znalezione trasy są przechowywane w pamięci karty przez 30 minut. Opcjonalny cache Cloudflare analogicznie 5/30 minut.
+- W panelu `Trasy Flightradar24 – aktualne rejsy` wpisuje się **PIN**, nie token API. PIN pozostaje w pamięci aktualnej karty do jej zamknięcia lub przeładowania.
+- Sandbox nadal działa niezależnie.
 
-W trybie ADS-B wszystko działa jak w wersji 9.0: radar, wpisywane współrzędne, promień, zdjęcia, przewoźnicy, odświeżanie co 3 s gdy jest samolot i 30 s gdy nie ma. Trasy pochodzą z dotychczasowych baz i mogą być błędne.
+## Ważne: warunki licencyjne
 
-W trybie FR24 Sandbox API udostępnia m.in. `callsign`, `flight`, `orig_iata`, `dest_iata`, `reg` i `type`. Są to **stałe, przykładowe dane**, nie rzeczywiste samoloty nad Zaborowem. Dlatego w tym trybie mapa i ustawienia lokalizacji są ukryte, a informacje o lotach nie odświeżają się automatycznie. Nie łączymy danych testowych FR24 z ADS-B.
+Regulamin FR24, sekcja 6.3.1(1)(iii), zabrania bez odrębnego upoważnienia używania FR24 API do uzupełniania bieżących danych innego operatora. **Nie włączaj tego połączenia przed uzyskaniem zgody FR24.** W tym celu kod wymaga ustawienia `FR24_HYBRID_PERMISSION_GRANTED=yes` w Cloudflare dopiero po uzyskaniu zgody.
 
-## Aktualizacja na GitHubie
+https://www.flightradar24.com/terms-of-service
 
-1. Rozpakuj archiwum ZIP na komputerze.
-2. W repozytorium `https://github.com/kpokonieczny1/radar-zaborow` zamień główny `index.html` na plik z archiwum.
-3. W podkatalogu `functions/api/` dodaj nowy plik `fr24.js` z archiwum (GitHub → **Add file → Upload files**).
-4. Plik `functions/api/flights.js` dołączyliśmy dla kompletności. Jeśli masz obecnie wersję 9.0, **nie musisz go podmieniać**. Jeśli wgrałeś wcześniejszą wersję, podmień również ten plik.
-5. Zatwierdź zmiany przez **Commit changes**.
+## Jak wdrożyć
 
-## Bezpieczne dodanie tokenu FR24 Sandbox w Cloudflare
+1. Na `https://github.com/kpokonieczny1/radar-zaborow` podmień `index.html`.
+2. Podmień `functions/api/fr24-routes.js` (jeżeli jeszcze nie ma — dodaj).
+3. Nie musisz wymieniać `functions/api/flights.js` ani `functions/api/fr24.js`.
+4. `Commit changes` spowoduje wdrożenie Cloudflare Pages.
+5. W Cloudflare → Workers & Pages → radar-zaborow → Settings → Variables and Secrets → **Production** dodaj:
 
-Nie dodawaj tokenu do GitHuba, `index.html` ani do tekstu rozmowy.
+| Name | Type | Value |
+|---|---|---|
+| `FR24_API_TOKEN` | Secret | **produkcyjny** token FR24 |
+| `FR24_ROUTE_PIN` | Secret | własny losowy kod min. 8 znaków (zalecane 20+) |
+| `FR24_HYBRID_PERMISSION_GRANTED` | Variable | `yes` **wyłącznie po zgodzie FR24** |
 
-1. Wejdź na `https://dash.cloudflare.com/`.
-2. **Workers & Pages → radar-zaborow → Settings → Variables and Secrets** (układ panelu może się różnić).
-3. Dodaj nową zmienną jako **Secret**, o nazwie dokładnie `FR24_SANDBOX_TOKEN`.
-4. Wklej do niej **pełny token Sandbox** z Key Management portalu Flightradar24, bez dopisywania `Bearer`.
-5. Ustaw dla środowiska **Production**, zapisz. W razie potrzeby w zakładce Deployments uruchom nowe wdrożenie albo zrób drobny commit, bo zmiana sekretu może wymagać nowego wdrożenia.
-6. Jeśli stary token był widoczny na publicznie udostępnionym zrzucie ekranu, unieważnij go i użyj nowego.
+6. Wdróż ponownie aplikację, jeżeli sekrety nie pojawią się od razu w bieżącym wdrożeniu.
+7. Otwórz stronę, rozwiń **Trasy Flightradar24 – aktualne rejsy**, wpisz PIN i wybierz **Włącz trasy FR24**.
 
-## Test
+**Bezpieczeństwo:** nie umieszczaj tokenu ani PIN-u w publicznym repozytorium ani na zrzucie ekranu. PIN chroni publiczny endpoint przed przypadkowym zużyciem Twoich kredytów; dla dodatkowej ochrony warto ograniczyć dostęp do strony przez Cloudflare Access.
 
-Po aktualizacji odwiedź:
+## Koszty i ograniczenia
 
-- `https://radar-zaborow.pages.dev/api/fr24` – surowe **przykładowe** dane JSON z FR24 Sandbox.
-- `https://radar-zaborow.pages.dev/` – strona radaru. Wybierz **FR24 Sandbox · test integracji**.
+`live/flight-positions/full` kosztuje obecnie **8 kredytów za zwrócony samolot**, pusty wynik kosztuje 1 kredyt. Jedno wywołanie sprawdza do 10 maszyn; nie wykonujemy go co 3 s. W odpowiedzi nie wszystkie loty muszą mieć trasę; brak wyników nie oznacza błędu aplikacji. `limit=30` ogranicza maksymalną liczbę wierszy w odpowiedzi API. Rzeczywiste zużycie zależy od ruchu i ponownych prób.
 
-Jeżeli `/api/fr24` zwraca błąd 503 i komunikat o braku tokenu, sprawdź sekret w Cloudflare. Jeśli zwraca 502, sprawdź poprawność tokenu lub dostępność API. W odpowiedzi JSON nie jest ujawniany token.
+Źródła: https://fr24api.flightradar24.com/docs/credit-overview oraz https://fr24api.flightradar24.com/docs/sandbox-environment.
 
-Sandbox ignoruje współrzędne, promień i czas. Pokazany przykładowy lot `SAS7679 / SK7679` z trasą `ARN → FUE` jest rekordem testowym z dokumentacji, **nie potwierdzeniem aktualnego lotu**.
+## Testy
 
-## Ważne ograniczenia
-
-- Konto Flightradar24 Silver nie daje produkcyjnego dostępu do API. Do rzeczywistych danych FR24 wymagana jest osobna subskrypcja i inny token.
-- Wersja 10.0 **nie** odpytuje płatnego API. Jest przygotowaniem do integracji.
-- Regulamin FR24 zabrania używania jego API do uzupełniania danych z innego źródła śledzenia ruchu lotniczego. Dlatego tryby są oddzielne. Przy przyszłym wdrożeniu FR24 Live trzeba pobierać dane o locie z FR24, nie wzbogacać danych ADS-B, oraz zadbać o ochronę przed nieautoryzowanymi zapytaniami zużywającymi kredyty.
-- Fotografii nie udostępnia podstawowy endpoint FR24; dla dotychczasowego trybu ADS-B zdjęcia pochodzą ze źródeł użytych w wersji 9.0, z ograniczeniami praw do zdjęć.
-
-Dokumentacja: https://fr24api.flightradar24.com/docs/sandbox-environment
+Walidacja składni JavaScript, testy z zasymulowanym API (FRA → WAW dla `LOT6EA`, odrzucanie niezgodnego `hex` / `reg`, brak PIN/zgody), bez użycia Twojego produkcyjnego tokenu. Rzeczywisty test po stronie Cloudflare następuje po konfiguracji sekretów i aktywacji.
