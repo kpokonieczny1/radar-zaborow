@@ -1,4 +1,4 @@
-// Radar Zaborów 9.0 · Cloudflare Pages Function
+// Radar Zaborów 15.0 · Cloudflare Pages Function
 // ?lat=52.26294444&lon=20.68608333&radius=20&mode=positions
 // ?lat=52.26294444&lon=20.68608333&radius=20&mode=full
 // Domyślny środek: Zaborów, 52°15′46,6″ N, 20°41′09,9″ E.
@@ -73,6 +73,16 @@ async function cachedJson(context, key, ttlSeconds, load) {
     } catch { /* brak cache */ }
   }
   return value;
+}
+
+// Nie pokazujemy ruchu naziemnego (np. pojazdów obsługi Okęcia).
+// C0–C7 to zestaw kategorii "surface/obstacle", ground oznacza na ziemi.
+// Celowo ukrywamy też kołujące samoloty; pojawią się po starcie.
+function isSurfaceTarget(raw) {
+  const category = clean(raw?.category).toUpperCase();
+  return /^C[0-7]$/.test(category)
+    || raw?.on_ground === true
+    || clean(raw?.alt_baro).toLowerCase() === 'ground';
 }
 
 function normalizeAircraft(raw, center) {
@@ -308,7 +318,8 @@ export async function onRequestGet(context) {
   try {
     const effective = Math.max(radius, 10);
     const raw = await firstPositions(effective, center);
-    const valid = raw.list.map(plane => normalizeAircraft(plane, center)).filter(Boolean)
+    const valid = raw.list.filter(plane => !isSurfaceTarget(plane))
+      .map(plane => normalizeAircraft(plane, center)).filter(Boolean)
       .filter(p => p.km <= effective).sort((a, b) => a.km - b.km);
     const flights = valid.filter(p => p.km <= radius);
     let output = flights;
