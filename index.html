@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 9.0 · samoloty na żywo</title>
+  <title>Radar Zaborów 10.0 · ADS-B i FR24 Sandbox</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -18,6 +18,16 @@
     .pill.bad{color:#ffaaa6;border-color:#895352}
     .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#122238;border:1px solid #2e4764;border-radius:16px;padding:12px 15px;margin-bottom:16px}
     .controls .name{color:#bbd4eb;font-size:14px;font-weight:600}
+    .modeBar{width:100%;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid #344d69;padding:2px 0 13px}
+    .modeBar label{font-size:14px;font-weight:750;color:#d1eaff}
+    .modeSelect{min-height:43px;border:1px solid #79a8d0;border-radius:10px;color:#fff;background:#102d48;font-size:15px;padding:8px}
+    .sandboxBanner{border:1px solid #93743a;background:#382d1c;color:#ffe7a8;border-radius:13px;padding:14px 16px;margin:0 0 14px;line-height:1.55}
+    .sandboxBanner strong{font-size:16px}
+    .sandboxBanner[hidden],.radar[hidden],.stats[hidden],.meta[hidden],.settingsForm[hidden]{display:none!important}
+    .sandboxRadarText{min-height:220px;display:grid;place-content:center;text-align:center;color:#e5d09d;line-height:1.6}
+    .sandboxRadarText[hidden]{display:none!important}
+    .modeHelp{font-size:12px;color:#aac5dd}
+    
     button{cursor:pointer;background:#276f9f;border:1px solid transparent;color:white;font:inherit;padding:9px 14px;border-radius:10px;min-height:41px}
     button:hover{background:#3784bb}
     button:focus-visible{outline:3px solid #97dbff;outline-offset:2px}
@@ -129,6 +139,14 @@
   </header>
 
   <nav class="controls" aria-label="Ustawienia radaru">
+    <div class="modeBar">
+      <label for="dataMode">Źródło danych</label>
+      <select class="modeSelect" id="dataMode">
+        <option value="adsb">ADS-B · rzeczywiste loty</option>
+        <option value="fr24-sandbox">FR24 Sandbox · test integracji</option>
+      </select>
+      <span class="modeHelp" id="modeHelp">Samoloty w pobliżu wybranego punktu</span>
+    </div>
     <form class="settingsForm" id="settingsForm" novalidate>
       <div class="settingField radius">
         <label for="radiusInput">Promień (km)</label>
@@ -158,9 +176,19 @@
     </form>
   </nav>
 
+  <div class="sandboxBanner" id="sandboxBanner" hidden role="note">
+    <strong>TRYB TESTOWY · FLIGHTRADAR24 SANDBOX</strong>
+    <div>Dane lotów są przykładowe i nie pokazują ruchu nad Zaborowem.
+      Flightradar24 ignoruje w Sandboxie współrzędne, promień i godzinę. Ten tryb służy tylko do sprawdzania pól numeru rejsu i trasy.</div>
+  </div>
   <main class="layout">
     <section class="panel" aria-label="Radar pozycji">
-      <div class="sectionHead"><h2>Pozycje</h2><span class="pill" id="count">—</span></div>
+      <div class="sectionHead"><h2 id="radarTitle">Pozycje</h2><span class="pill" id="count">—</span></div>
+      <div class="sandboxRadarText" id="sandboxRadarText" hidden>
+        <div style="font-size:40px">🧪</div>
+        <strong>Przykładowe dane FR24</strong>
+        <div>Pozycji testowych nie nanosimy na radar Zaborowa.</div>
+      </div>
       <svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Pozycje samolotów wokół środka radaru">
         <circle cx="200" cy="200" r="178" fill="#102a38"/>
         <circle class="zone" id="zone10" cx="200" cy="200" r="178"/>
@@ -174,14 +202,14 @@
         <text id="radarCenterName" x="211" y="212">Zaborów</text>
         <g id="dots"></g>
       </svg>
-      <div class="stats">
+      <div class="stats" id="radarStats">
         <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
         <div class="stat"><strong id="allCount">—</strong><span>W wybranym zasięgu</span></div>
       </div>
-      <div class="meta"><span id="radiusInfo">Promień: 10 km (poziomo)</span><span id="time">—</span></div>
+      <div class="meta" id="radarMeta"><span id="radiusInfo">Promień: 10 km (poziomo)</span><span id="time">—</span></div>
     </section>
     <section class="panel" aria-label="Lista lotów">
-      <div class="sectionHead"><h2>Aktualne loty</h2><button type="button" id="refresh">Odśwież</button></div>
+      <div class="sectionHead"><h2 id="listTitle">Aktualne loty</h2><button type="button" id="refresh">Odśwież</button></div>
       <div id="flights" aria-live="polite"><div class="empty">Pobieranie danych…</div></div>
     </section>
   </main>
@@ -190,7 +218,8 @@
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
     ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
     Kraj lotniska: kod ISO 3166-1 alpha-3, jeśli udostępnia go baza danych.
-    Trasy są orientacyjne i nie stanowią potwierdzonego planu lotu.
+    Trasy ADS-B są orientacyjne i nie stanowią potwierdzonego planu lotu.
+    FR24 Sandbox to oddzielny tryb z danymi stałymi. W trybie testowym nie łączymy danych FR24 z pozycjami ADS-B.
     Przy wygaszonym ekranie tablet może wstrzymywać odświeżanie.
   </footer>
 
@@ -300,23 +329,27 @@ function photoHTML(f) {
       · ${escapeHtml(photo.source || 'Źródło zdjęcia')}</figcaption></figure>`;
 }
 function flightCard(f) {
-  const near = f.km <= 10, company = flightDetails(f);
+  const sandbox = dataMode === 'fr24-sandbox';
+  const near = !sandbox && f.km <= 10, company = flightDetails(f);
+  const distance = sandbox ? 'Przykład FR24' : `${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}`;
   const hasRoute = f.from && f.to;
   return `<article class="flight" data-flight-key="${escapeHtml(k(f))}">
     <div class="flightTop"><div class="flightIdentity">${logoHTML(f)}<div>
       <strong>${escapeHtml(f.flight || f.registration || f.hex || 'Samolot')}</strong>
       <div class="company">${escapeHtml(company.name)}</div></div></div>
-      <span class="dist ${near ? 'near' : ''}" data-role="dist">${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}</span></div>
+      <span class="dist ${near ? 'near' : ''}" data-role="dist">${distance}</span></div>
     <div class="flightMain"><div>${photoHTML(f)}</div><div class="flightData">
       <div class="fields">
         ${field('Samolot', f.model)}${field('Rejestracja', f.registration)}
+        ${f.flight_number ? field('Numer rejsu', f.flight_number) : ''}
         ${field('Wysokość', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
         ${field('Prędkość', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
       </div>
       ${routeHTML(f)}
-    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · dane niezweryfikowane</div>` : ''}</article>`;
+    </div></div>${hasRoute ? `<div class="routeNote">Źródło trasy: ${escapeHtml(f.route_source || 'baza lotnicza')} · ${sandbox ? 'przykładowe dane testowe' : 'dane niezweryfikowane'}</div>` : ''}</article>`;
 }
 
+let dataMode = 'adsb';
 let radius = 10;
 let center = { ...DEFAULT_CENTER };
 let activeMs = 3000;
@@ -410,8 +443,9 @@ function paintCards(force = false) {
       const alt = article.querySelector('[data-role="alt"]');
       const speed = article.querySelector('[data-role="speed"]');
       if (dist) {
-        dist.textContent = f.km + ' km' + (f.km <= 10 ? ' · strefa 10 km' : '');
-        dist.classList.toggle('near', f.km <= 10);
+        dist.textContent = dataMode === 'fr24-sandbox' ? 'Przykład FR24' :
+          f.km + ' km' + (f.km <= 10 ? ' · strefa 10 km' : '');
+        dist.classList.toggle('near', dataMode !== 'fr24-sandbox' && f.km <= 10);
       }
       if (alt) alt.textContent = f.altitude_m == null ? 'Brak danych' : f.altitude_m.toLocaleString('pl-PL') + ' m';
       if (speed) speed.textContent = f.speed_kmh == null ? 'Brak danych' : f.speed_kmh + ' km/h';
@@ -476,9 +510,66 @@ async function enrichIfNeeded(epoch) {
   } catch { /* dane pozycyjne będą działać niezależnie od metadanych */ }
   finally { detailInFlight = false; }
 }
+async function fetchSandbox() {
+  if (document.hidden || dataMode !== 'fr24-sandbox') return;
+  const epoch = requestEpoch;
+  clearTimeout(timer);
+  if (positionAbort) positionAbort.abort();
+  positionAbort = new AbortController();
+  el('status').textContent = 'Łączenie z FR24 Sandbox…';
+  try {
+    const response = await fetch('/api/fr24', {cache:'no-store',signal:positionAbort.signal});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+    if (epoch !== requestEpoch || dataMode !== 'fr24-sandbox') return;
+    current = Array.isArray(data.flights) ? data.flights : [];
+    el('count').textContent = `${current.length} przykładów`;
+    el('status').textContent = '● Sandbox działa · dane statyczne';
+    el('status').className = 'pill';
+    el('refreshInfo').textContent = 'Sandbox · dane stałe · bez automatycznego odświeżania';
+    el('refreshInfo').className = 'speed';
+    el('flights').innerHTML = current.length ? current.map(flightCard).join('')
+      : '<div class="empty">FR24 Sandbox zwrócił pustą listę testową.</div>';
+    attachMediaErrors();
+  } catch (e) {
+    if (epoch !== requestEpoch || e.name === 'AbortError') return;
+    el('status').textContent = '⚠ Sandbox: brak połączenia';
+    el('status').className = 'pill bad';
+    el('flights').innerHTML = `<div class="empty">${escapeHtml(e.message)}<br><br>
+      Sprawdź, czy w Cloudflare dodano sekret FR24_SANDBOX_TOKEN.</div>`;
+  }
+}
+function changeDataMode(next) {
+  if (!['adsb','fr24-sandbox'].includes(next)) return;
+  dataMode = next;
+  requestEpoch++;
+  clearTimeout(timer);
+  if (positionAbort) positionAbort.abort();
+  if (detailAbort) detailAbort.abort();
+  current = [];
+  meta.clear();
+  cardKeys = '';
+  detailInFlight = false;
+  lastDetailAttempt = 0;
+  const sandbox = dataMode === 'fr24-sandbox';
+  el('sandboxBanner').hidden = !sandbox;
+  el('sandboxRadarText').hidden = !sandbox;
+  el('radar').hidden = sandbox;
+  el('radarStats').hidden = sandbox;
+  el('radarMeta').hidden = sandbox;
+  el('settingsForm').hidden = sandbox;
+  el('modeHelp').textContent = sandbox ? 'Przykładowe rekordy · bez filtrów lokalizacji' :
+    'Samoloty w pobliżu wybranego punktu';
+  el('listTitle').textContent = sandbox ? 'Przykładowe loty FR24' : 'Aktualne loty';
+  el('radarTitle').textContent = sandbox ? 'Tryb testowy' : 'Pozycje';
+  el('flights').innerHTML = '<div class="empty">Ładowanie…</div>';
+  el('count').textContent = '—';
+  if (sandbox) void fetchSandbox();
+  else void pollPositions();
+}
 async function pollPositions() {
   clearTimeout(timer);
-  if (document.hidden) return;
+  if (document.hidden || dataMode !== 'adsb') return;
   const epoch = requestEpoch;
   const serial = ++pollSerial;
   if (positionAbort) positionAbort.abort();
@@ -570,13 +661,21 @@ el('restoreCenter').addEventListener('click', () => {
   el('longitudeInput').value = formatCoord(DEFAULT_CENTER.lon);
   el('settingsForm').requestSubmit();
 });
-el('refresh').addEventListener('click', () => { clearTimeout(timer); void pollPositions(); });
+el('dataMode').addEventListener('change', (event) => changeDataMode(event.target.value));
+el('refresh').addEventListener('click', () => {
+  clearTimeout(timer);
+  if (dataMode === 'fr24-sandbox') void fetchSandbox();
+  else void pollPositions();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     clearTimeout(timer);
     if (positionAbort) positionAbort.abort();
     if (detailAbort) detailAbort.abort();
-  } else { void pollPositions(); }
+  } else {
+    if (dataMode === 'fr24-sandbox') void fetchSandbox();
+    else void pollPositions();
+  }
 });
 void pollPositions();
 </script>
