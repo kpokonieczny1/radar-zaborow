@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 15.0 · kompaktowy widok</title>
+  <title>Radar Zaborów 15.1 · radar i loty obok siebie</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -241,6 +241,64 @@
       .routeAirportName{font-size:9px}.routeCaption{font-size:8px}
       .flightBottom{font-size:10px;gap:2px 6px}
     }
+
+    /* 15.1: obie kolumny pozostają obok siebie także w pionowym układzie Androida.
+       Węższe urządzenia mogą przesunąć TYLKO pulpit w poziomie, zamiast
+       przenosić listę lotów pod radar. Nadpisujemy wcześniejsze breakpointy. */
+    .dashboardViewport {width:100%;min-width:0}
+    .empty {overflow-wrap:anywhere}
+    @media (max-width:1050px) {
+      .layout {display:grid;grid-template-columns:clamp(205px,28vw,275px) minmax(0,1fr);gap:10px;align-items:start}
+      .layout > .panel {min-width:0}
+      .radar {width:100%;max-width:100%}
+      .flight {grid-template-columns:130px minmax(0,1fr)}
+      .aircraftPhoto>a,.photoPlaceholder {width:130px;height:93px}
+      .aircraftPhoto figcaption {width:130px;max-width:130px}
+    }
+    @media (min-width:701px) {
+      .layout > .panel:first-child {position:sticky;top:8px}
+    }
+    @media (max-width:700px) {
+      .dashboardViewport {overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+      .layout {min-width:695px;grid-template-columns:205px minmax(0,1fr);gap:9px}
+      .radar {width:100%;max-width:100%}
+      .flight {grid-template-columns:130px minmax(0,1fr);gap:9px}
+      .aircraftPhoto>a,.photoPlaceholder {width:130px;height:93px}
+      .aircraftPhoto figcaption {width:130px;max-width:130px}
+      .company {max-width:170px}
+      .routeCode {font-size:16px}
+      .routeAirportName {font-size:10px}
+    }
+
+    /* Pionowy tablet 561–700 px: oba panele mieszczą się bez przewijania w bok. */
+    @media (min-width:561px) and (max-width:700px) {
+      .dashboardViewport {overflow-x:visible}
+      .layout {min-width:0;grid-template-columns:clamp(160px,28vw,196px) minmax(0,1fr);gap:8px}
+      .panel {padding:9px}
+      .flight {grid-template-columns:96px minmax(0,1fr);gap:7px;padding:6px}
+      .aircraftPhoto>a,.photoPlaceholder {width:96px;height:80px}
+      .aircraftPhoto figcaption {width:96px;max-width:96px;font-size:8px}
+      .flightTop strong {font-size:12px}
+      .flightIdentity {gap:4px}
+      .logoWrap,.logoPlaceholder {width:36px;height:25px;flex:0 0 36px}
+      .logoWrap img {width:34px;height:23px}
+      .logoWrap .logoPlaceholder {width:36px;height:25px}
+      .company {font-size:10px;max-width:125px}
+      .dist {font-size:10px;white-space:normal;text-align:right}
+      .routeAirport {padding:4px;min-height:47px}
+      .routeCode {font-size:14px}
+      .routeCountry {font-size:8px;padding:1px 3px}
+      .routeAirportName {font-size:9px}
+      .routeCaption {font-size:8px}
+      .routeStrip {grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);gap:3px}
+      .routeArrow {font-size:12px}
+      .flightBottom {font-size:10px;gap:2px 6px}
+      .stats {display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+      .stat {min-width:0;padding:5px}
+      .stat strong {font-size:16px}
+      .stat span {font-size:9px}
+      .radarLegend {font-size:9px;gap:4px}
+    }
   </style>
 </head>
 <body>
@@ -293,6 +351,7 @@
       </div>
     </form>
   </nav>
+  <div class="dashboardViewport" role="region" tabindex="0" aria-label="Radar i lista lotów, na wąskim ekranie przewiń poziomo">
   <main class="layout">
     <section class="panel" aria-label="Radar pozycji">
       <div class="sectionHead"><h2 id="radarTitle">Pozycje</h2><span class="pill" id="count">—</span></div>
@@ -321,6 +380,7 @@
       <div id="flights" aria-live="polite"><div class="empty">Pobieranie danych…</div></div>
     </section>
   </main>
+  </div>
 
   <footer class="foot">
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
