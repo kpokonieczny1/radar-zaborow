@@ -14,7 +14,7 @@ const HEADERS = {
   'x-content-type-options':'nosniff'
 };
 const AIRPORTS = Object.freeze({
-  WAW:['Warszawa-Chopin','POL'], WMI:['Warszawa-Modlin','POL'], EPBC:['Warszawa-Babice','POL'], KRK:['Kraków-Balice','POL'],
+  WAW:['Warszawa-Chopin','POL'], WMI:['Warszawa-Modlin','POL'], QPB:['Warszawa-Babice','POL'], EPBC:['Warszawa-Babice','POL'], KRK:['Kraków-Balice','POL'],
   SZZ:['Szczecin-Goleniów','POL'], GDN:['Gdańsk','POL'], WRO:['Wrocław','POL'],
   KTW:['Katowice','POL'], POZ:['Poznań-Ławica','POL'], RZE:['Rzeszów','POL'],
   FRA:['Frankfurt nad Menem','DEU'], MUC:['Monachium','DEU'], BER:['Berlin-Brandenburg','DEU'],
