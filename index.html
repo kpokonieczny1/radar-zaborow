@@ -418,6 +418,7 @@ let fr24Busy = false;
 let fr24Abort = null;
 let fr24Routes = new Map();
 const airportDirectory = new Map([
+  ['QPB', {name:'Warszawa-Babice', country_iso3:'POL'}],
   ['EPBC', {name:'Warszawa-Babice', country_iso3:'POL'}],
 ]);
 const airportLookupAt = new Map();
@@ -429,6 +430,8 @@ try {
       airportDirectory.set(code, entry);
   }
 } catch {}
+// Nie pozwalaj, aby stare dane z pamięci przeglądarki przesłoniły Babice.
+for (const code of ['QPB', 'EPBC']) airportDirectory.set(code, {name:'Warszawa-Babice', country_iso3:'POL'});
 function airportLookup(airport) {
   const code = String(airport?.code || '').trim().toUpperCase();
   const found = airportDirectory.get(code);

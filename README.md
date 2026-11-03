@@ -1,3 +1,9 @@
+## Aktualizacja 14.1
+
+Dodano kod IATA `QPB` — Warszawa-Babice, Polska (`POL`); zachowano `EPBC`.
+Aby zaktualizować, podmień `index.html`, `functions/api/fr24-routes.js` i `functions/api/airports.js` na GitHubie.
+Pozostałe ustawienia Cloudflare bez zmian.
+
 # Radar Zaborów 14.0
 
 Aktualizacja wersji 13.0 — nowe ikony na radarze, zwijany panel FR24 i obsługa tras niepełnych.
