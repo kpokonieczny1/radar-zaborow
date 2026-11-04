@@ -1,47 +1,36 @@
-# Radar Zaborów 16.0 – lotniska i przybliżony wiek samolotu
+# Radar Zaborów 17.0 — globalne sprawdzanie wieku przez AirLabs
 
-## Zmiany
+**Zmieniono tylko dwa pliki:** `index.html` i `functions/api/aircraft-age.js`.
+Nie zmieniano radaru, zdjęć, API pozycji, tras FR24, ustawień i znaczników lotnisk.
 
-### Oznaczenia lotnisk
+## Wdrożenie (Cloudflare Pages)
 
-Na tarczy radaru pojawiają się nieruchome, żółte znaczniki lotnisk:
+1. Podmień `index.html` i `functions/api/aircraft-age.js` na GitHubie w repozytorium `kpokonieczny1/radar-zaborow`.
+2. Utwórz konto AirLabs, https://airlabs.co/signup, jeśli nie masz klucza API.
+3. Cloudflare → Workers & Pages → radar-zaborow → Settings → Variables and Secrets → **Add**:
+   - Name: `AIRLABS_API_KEY`
+   - Type: **Secret**
+   - Value: klucz API z AirLabs (nie wklejaj go do pliku, repozytorium ani czatu)
+   - Environment: **Production**.
+4. Wykonaj nowe wdrożenie, jeżeli Cloudflare tego wymaga (np. nowy commit na GitHubie).
+5. Przetestuj konfigurację: `https://radar-zaborow.pages.dev/api/aircraft-age?check=1`
+   - `"airlabs_configured":true` — sekret jest dostępny w funkcji.
+6. Sprawdź pojedynczy samolot po ICAO24: `https://radar-zaborow.pages.dev/api/aircraft-age?hex=AC0CAB` (FAA fallback) lub podaj hex europejskiego samolotu z radaru razem z `&registration=...`.
 
-- **Lotnisko Chopina / Okęcie** – WAW / EPWA, punkt odniesienia 52.1658333333 N, 20.9672222222 E.
-- **Warszawa-Babice** – QPB / EPBC, punkt odniesienia 52.2691666667 N, 20.9072222222 E.
+## Co dokładnie działa?
 
-Znaczniki są widoczne **tylko w granicach aktualnego promienia**. Z centrum Zaborowa do Babic jest ok. **15 km**, a do Okęcia ok. **22 km**, dlatego do obserwacji obu lotnisk ustaw promień **co najmniej 25 km**. Punkty są stałe, nie są pobierane z API FR24 i nie zużywają kredytów. Są to punkty referencyjne lotnisk, a nie dokładne końce pasów startowych. Samoloty naziemne nadal są ukrywane przez filtr.
+- Funkcja pyta AirLabs Fleets po numerze rejestracyjnym (lub ICAO24, gdy rejestracja jest nieznana).
+- Odczytuje `built` i `age`; weryfikuje zgodność rejestracji/ICAO24. Jeśli jest rok produkcji, pokazuje `ok. N lat (RRRR)`. Jeśli jest wyłącznie wiek, pokazuje `ok. N lat`.
+- Dla niektórych amerykańskich samolotów pozostaje bezpłatne źródło OpenAirframes/FAA.
+- Odpowiedzi pozytywne są zapamiętywane na tablecie i w Cloudflare ok. 30 dni; po błędzie lub braku klucza aplikacja próbuje ponownie znacznie szybciej.
+- Pamięć starych błędnych odpowiedzi z wersji 16 nie blokuje nowego wyszukiwania (zmieniono wersję klucza pamięci).
+- **Nie korzysta z FR24, więc nie zużywa kredytów Flightradar24.** AirLabs ma jednak osobne limity i zasady rozliczania wywołań.
 
-### Wiek samolotu
+## Ważne ograniczenie darmowego planu
 
-W kompaktowej karcie dodano pole **Wiek**, np. `ok. 7 lat (2019)`.
+AirLabs dokumentuje pola `built` i `age`, ale **nie gwarantuje ich dostępności w planie Free**. Jeśli zwraca rekord bez tych pól, aplikacja wyświetli „brak dostępu do wieku” zamiast fałszywego wieku. Nie kupuj planu płatnego bez najpierw wykonania testu po kluczu. W razie braku uprawnień do bazy flot konieczny będzie inny dostawca albo plan obejmujący tę bazę.
 
-- Wiek liczony jest **przybliżenie**: `bieżący rok - rok produkcji`, a nie z dokładnej daty pierwszego lotu.
-- Informacje o roczniku próbowane są najpierw z danych ADS-B (jeżeli dostawca je zwraca), a następnie przez osobną funkcję `aircraft-age.js` z bezpłatnej bazy OpenAirframes (przede wszystkim dane FAA dla rejestracji amerykańskich) i pomocniczo ADSB.lol.
-- Dla części samolotów, szczególnie europejskich, może być pokazane `nieznany` – nie wnioskujemy wieku z typu maszyny ani daty rejestracji.
-- Dane są przechowywane lokalnie na tablecie do 30 dni, a odpowiedzi API mogą być również buforowane przez Cloudflare. FR24 **nie jest wywoływany** w celu ustalania wieku.
+## Źródła
 
-## Aktualizacja GitHub / Cloudflare Pages
-
-Zastąp w repozytorium `kpokonieczny1/radar-zaborow`:
-
-1. Plik główny `index.html` nowym plikiem z tej paczki.
-2. Plik `functions/api/flights.js` nową wersją z tej paczki.
-3. **Dodaj nowy** plik `functions/api/aircraft-age.js` do istniejącego katalogu `functions/api/`.
-
-Pozostałe pliki (`fr24-routes.js`, `airports.js`), sekret FR24 i konfiguracja Cloudflare **pozostają bez zmian**.
-
-Po `Commit changes` poczekaj na automatyczne wdrożenie, otwórz `https://radar-zaborow.pages.dev/` i odśwież stronę z wyczyszczeniem pamięci podręcznej (w Androidzie można zamknąć i ponownie uruchomić stronę).
-
-## Szybki test wieku API
-
-`https://radar-zaborow.pages.dev/api/aircraft-age?hex=AC0CAB`
-
-Gdy baza zna rok, JSON zawiera `year_built` i `age_years`; w innym przypadku pola te mają wartość `null`. Test nie wykorzystuje FR24.
-
-## Źródła i ograniczenia
-
-- Współrzędne EPWA: oficjalny eAIP PANSA, ARP 520957N 0205802E.
-- Współrzędne EPBC: Urząd Lotnictwa Cywilnego, 52°16′09″N 20°54′26″E.
-- Rok produkcji: `https://api.pigeite.com` (OpenAirframes, FAA), metadane ADSB.lol i dostępne pola w aktualnym strumieniu ADS-B.
-
-Testy lokalne obejmują walidację współrzędnych markerów i obecności znaczników przy różnych promieniach, renderowanie wieku i składnię JavaScript. Nie weryfikowano na produkcyjnym Cloudflare dostępności zewnętrznych baz.
+- https://airlabs.co/docs/fleets
+- https://github.com/pigeon318/OpenAirframes

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 16.0 · lotniska i wiek samolotów</title>
+  <title>Radar Zaborów 17.0 · lotniska i wiek samolotów</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -527,13 +527,20 @@ function compactMetric(label, value, role = '') {
     + `<strong class="microValue"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</strong></span>`;
 }
 function ageLabel(plane) {
-  // Rok produkcji nie oznacza dokładnej daty pierwszego lotu.
-  const h = String(plane.hex || '').toUpperCase();
-  const info = ageRecords.get(h);
-  const y = Number(info?.year_built || plane.year_built);
-  const now = new Date().getFullYear();
-  if (!Number.isInteger(y) || y < 1940 || y > now) return 'nieznany';
-  return `ok. ${now - y} lat (${y})`;
+  // Prawidłowy rocznik konkretnej maszyny, a nie typ czy data rejestracji.
+  const h=String(plane.hex||'').replace(/^~/,'').toUpperCase();
+  const info=ageRecords.get(h);
+  const y=Number(info?.year_built ?? plane.year_built ?? 0);
+  const now=new Date().getFullYear();
+  if (Number.isInteger(y) && y>=1940 && y<=now) return `ok. ${now-y} lat (${y})`;
+  const a=Number(info?.age_years);
+  if (info?.age_years != null && Number.isFinite(a) && a>=0 && a<110) return `ok. ${Math.floor(a)} lat`;
+  if (info?.status==='configuration_required') return 'dodaj klucz AirLabs';
+  if (info?.status==='access_denied') return 'brak dostępu do wieku';
+  if (info?.status==='fields_unavailable') return 'brak danych w AirLabs';
+  if (info?.status==='quota_exceeded') return 'limit AirLabs';
+  if (info?.status==='airlabs_error') return 'błąd API wieku';
+  return 'nieznany';
 }
 function flightCard(f) {
   const near = f.km <= 10;
@@ -599,9 +606,11 @@ renderCenter();
 // brak danych przez 24 godziny. Zapytania nie korzystają z FR24.
 const ageRecords = new Map();
 try {
-  const saved = JSON.parse(localStorage.getItem('radar-aircraft-age-v1') || '{}');
+  const saved = JSON.parse(localStorage.getItem('radar-aircraft-age-v2') || '{}');
   for (const [hex, entry] of Object.entries(saved)) {
-    const ttl = entry?.year_built ? 30*86400000 : 86400000;
+    const ttl = (entry?.year_built || entry?.age_years != null) ? 30*86400000
+      : (entry?.status === 'configuration_required' ? 5*60000 :
+         ['quota_exceeded','airlabs_error'].includes(entry?.status) ? 2*60000 : 60*60000);
     if (/^[A-F0-9]{6}$/.test(hex) && entry && Date.now() - entry.checked_at < ttl)
       ageRecords.set(hex, entry);
   }
@@ -839,23 +848,29 @@ async function enrichIfNeeded(epoch) {
 }
 async function enrichAgeIfNeeded(epoch) {
   if (ageBusy || document.hidden) return;
+  // Rejestracja poprawia wyszukiwanie globalne w AirLabs.
   const candidates = current.filter(f => !f.year_built)
-    .map(f => String(f.hex || '').replace(/^~/, '').toUpperCase())
-    .filter(h => /^[A-F0-9]{6}$/.test(h) && !ageRecords.has(h));
-  const unique = [...new Set(candidates)].slice(0, 8);
+    .map(f => ({hex:String(f.hex || '').replace(/^~/,'').toUpperCase(),
+      registration:String(f.registration || '').trim().toUpperCase()}))
+    .filter(f => /^[A-F0-9]{6}$/.test(f.hex) && !ageRecords.has(f.hex));
+  const unique = [...new Map(candidates.map(f => [f.hex, f])).values()].slice(0, 8);
   if (!unique.length) return;
   ageBusy = true;
   try {
-    for (const hex of unique) {
+    for (const candidate of unique) {
+      const {hex,registration}=candidate;
       if (epoch !== requestEpoch || document.hidden) break;
-      // Nie wykonujemy równoległych serii zapytań do darmowej bazy.
-      let entry = {year_built:null, source:null, checked_at:Date.now()};
+      // Nie wykonujemy równoległych serii zapytań do bazy flot.
+      let entry = {year_built:null, age_years:null,source:null,status:'not_found',checked_at:Date.now()};
       try {
-        const response = await fetch(`/api/aircraft-age?hex=${encodeURIComponent(hex)}`, {cache:'no-store'});
+        const params = new URLSearchParams({hex});
+        if (registration) params.set('registration',registration);
+        const response = await fetch(`/api/aircraft-age?${params}`, {cache:'no-store'});
         if (response.ok) {
           const data = await response.json();
-          entry = {year_built:data.year_built ?? null, source:data.source ?? null, checked_at:Date.now()};
-        }
+          entry = {year_built:data.year_built ?? null,age_years:data.age_years ?? null,
+            status:data.status || 'not_found',source:data.source ?? null,checked_at:Date.now()};
+        } else entry.status='airlabs_error';
       } catch { /* brak danych - ponowna próba innego dnia */ }
       if (epoch !== requestEpoch) break;
       ageRecords.set(hex, entry);
@@ -863,7 +878,7 @@ async function enrichAgeIfNeeded(epoch) {
         const oldest = ageRecords.keys().next().value;
         ageRecords.delete(oldest);
       }
-      try {localStorage.setItem('radar-aircraft-age-v1', JSON.stringify(Object.fromEntries(ageRecords)));} catch {}
+      try {localStorage.setItem('radar-aircraft-age-v2', JSON.stringify(Object.fromEntries(ageRecords)));} catch {}
       // Dotykamy tylko kart, nie pobieramy ponownie zdjęć ani tras.
       if (current.some(f => String(f.hex || '').toUpperCase() === hex)) paintCards(true);
     }
