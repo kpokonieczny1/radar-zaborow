@@ -1,64 +1,108 @@
-// Radar Zaborów 16.0 – bezpłatne informacje o roku produkcji samolotu.
-// Pozycje i trasy nie są tu pobierane. Ten endpoint NIE korzysta z FR24.
-// Baza OpenAirframes jest na razie oparta przede wszystkim na rejestrze FAA (USA).
+// Radar Zaborów 17.0 — wiek pojedynczego samolotu.
+// AirLabs Fleets (globalna baza, potrzebny AIRLABS_API_KEY),
+// a bez klucza lub danych AirLabs: OpenAirframes/FAA dla części USA.
+// Nie korzysta z FR24, nie zwraca klucza API do przeglądarki.
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
-  'cache-control': 'public, max-age=3600',
   'x-content-type-options': 'nosniff',
 };
-const validYear = value => {
-  const year = Number(value);
-  return Number.isInteger(year) && year >= 1940 && year <= new Date().getUTCFullYear()
-    ? year : null;
-};
-async function requestJson(url, ms) {
-  const response = await fetch(url, {headers:{accept:'application/json'}, signal:AbortSignal.timeout(ms)});
-  if (!response.ok) return null;
-  return response.json();
+const currentYear = () => new Date().getUTCFullYear();
+function validYear(value) {
+  if (value == null || value === '') return null;
+  const y = Number(value);
+  return Number.isInteger(y) && y >= 1940 && y <= currentYear() ? y : null;
 }
-async function lookup(hex) {
-  // 1. OpenAirframes – wiarygodny rok z rejestru FAA, jeśli posiada rekord.
-  // Nie odczytujemy i nie przechowujemy nazwisk ani innych danych właścicieli.
+function validAge(value) {
+  if (value == null || value === '') return null;
+  const age = Number(value);
+  return Number.isFinite(age) && age >= 0 && age <= 110 ? Math.floor(age) : null;
+}
+function responseJSON(data, status=200, ttl=3600) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers:{...JSON_HEADERS, 'cache-control':`public, max-age=${ttl}`},
+  });
+}
+async function fetchJSON(url, timeout=5500) {
+  const resp = await fetch(url, { headers:{accept:'application/json'}, signal:AbortSignal.timeout(timeout) });
+  // Nie umieszczamy URL (z tajnym kluczem) w żadnym komunikacie błędu.
+  if (!resp.ok) throw new Error(`Dostawca odpowiedział HTTP ${resp.status}`);
+  return resp.json();
+}
+function normalizeRegistration(value) {
+  const reg = String(value || '').trim().toUpperCase();
+  return /^[A-Z0-9-]{3,12}$/.test(reg) ? reg : '';
+}
+function airlabsRows(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.response)) return data.response;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+async function lookupAirLabs(key, hex, registration) {
+  const params = new URLSearchParams({api_key:key, _fields:'hex,reg_number,built,age', limit:'5'});
+  if (registration) params.set('reg_number',registration);
+  else params.set('hex',hex);
+  const data = await fetchJSON(`https://airlabs.co/api/v9/fleets?${params}`,6500);
+  if (data?.error) {
+    // Żaden opis błędu zwrócony przez dostawcę nie może ujawnić tokenu.
+    const code = String(data.error.code || '').toLowerCase();
+    const limited = /limit|quota|balance|rate/.test(code);
+    const forbidden = /permission|plan|access|restrict|endpoint/.test(code);
+    return {status: limited?'quota_exceeded':forbidden?'access_denied':'airlabs_error', year_built:null, age_years:null, source:null};
+  }
+  const rows = airlabsRows(data);
+  const row = rows.find(item => {
+    const h=String(item?.hex||'').trim().toUpperCase();
+    const r=normalizeRegistration(item?.reg_number);
+    // Reg. może być przypisana ponownie; nie bierzemy pierwszego, niepasującego rekordu.
+    return (h && h===hex) || (registration && r === registration && (!h || h===hex));
+  });
+  if (!row) return {status:'not_found', year_built:null,age_years:null,source:null};
+  const year_built = validYear(row.built ?? row.year_built ?? row.year);
+  const age_years = year_built != null ? currentYear()-year_built : validAge(row.age);
+  return {year_built,age_years,source:'AirLabs Fleets',
+    status: year_built!=null || age_years!=null?'ok':'fields_unavailable'};
+}
+async function lookupFAA(hex) {
   try {
-    const data = await requestJson(`https://api.pigeite.com/aircraft/${hex.toLowerCase()}`, 5000);
-    if (data && String(data.icao_hex || '').toUpperCase() === hex) {
-      const year = validYear(data.year_manufactured ?? data.year_built);
-      if (year) return {year_built:year, source:'OpenAirframes / FAA'};
-    }
-  } catch { /* brak dostępu lub brak samolotu w bazie */ }
-  // 2. Metadane samolotu z otwartego odbiornika, o ile dostawca zwraca rok.
-  // Jest to jednorazowe zapytanie o daną maszynę, nie cykliczne śledzenie.
-  try {
-    const data = await requestJson(`https://api.adsb.lol/v2/hex/${hex}`, 4000);
-    const match = (Array.isArray(data?.ac) ? data.ac : [])
-      .find(a => String(a?.hex || '').replace(/^~/, '').toUpperCase() === hex);
-    const year = validYear(match?.year_built ?? match?.built_year ?? match?.year ?? match?.yr);
-    if (year) return {year_built:year, source:'ADSB.lol – metadane statku'};
-  } catch { /* rok jest opcjonalny */ }
-  return {year_built:null, source:null};
+    const obj = await fetchJSON(`https://api.pigeite.com/aircraft/${hex.toLowerCase()}`,4500);
+    if (String(obj?.icao_hex||'').toUpperCase()!==hex) return null;
+    const year_built=validYear(obj.year_manufactured ?? obj.year_built);
+    if (year_built!==null) return {year_built,age_years:currentYear()-year_built,source:'OpenAirframes / FAA',status:'ok'};
+  } catch {}
+  return null;
 }
 export async function onRequestGet(context) {
-  const url = new URL(context.request.url);
-  const hex = String(url.searchParams.get('hex') || '').trim().toUpperCase();
-  if (!/^[A-F0-9]{6}$/.test(hex)) return new Response(JSON.stringify({error:'Niepoprawny identyfikator ICAO24.'}),
-    {status:400,headers:{...JSON_HEADERS,'cache-control':'no-store'}});
-  const key = new Request(new URL(`/__radar_age_cache_v1/${hex}`,url));
-  try {
-    if (typeof caches !== 'undefined' && caches.default) {
-      const hit = await caches.default.match(key);
-      if (hit) return hit;
-    }
-  } catch { /* Cloudflare cache może być niedostępny */ }
-  const result = await lookup(hex);
-  const payload = JSON.stringify({hex, year_built:result.year_built,
-    age_years:result.year_built ? new Date().getUTCFullYear() - result.year_built : null,
-    source:result.source,
-    note:'Wiek przybliżony, liczony na podstawie roku produkcji, nie daty pierwszego lotu.'});
-  const maxAge = result.year_built ? 30 * 86400 : 6 * 3600;
-  const response = new Response(payload,{status:200,headers:{...JSON_HEADERS,'cache-control':`public, max-age=${maxAge}`}});
-  try {
-    if (typeof caches !== 'undefined' && caches.default && typeof context.waitUntil === 'function')
-      context.waitUntil(caches.default.put(key,response.clone()).catch(()=>{}));
-  } catch { /* bez cache */ }
+  const {request,env={}}=context;
+  const url=new URL(request.url);
+  const hex=String(url.searchParams.get('hex')||'').toUpperCase().trim().replace(/^~/,'');
+  const registration=normalizeRegistration(url.searchParams.get('registration'));
+  if (url.searchParams.get('check')==='1')
+    return responseJSON({airlabs_configured:!!(env.AIRLABS_API_KEY||env.AIRLABS_KEY),version:'17.0'},200,0);
+  if (!/^[A-F0-9]{6}$/.test(hex)) return responseJSON({error:'Nieprawidłowy identyfikator ICAO24'},400,0);
+  const cacheKey=new Request(new URL(`/__radar_age_cache_v17/${hex}`,url));
+  try {const hit=await caches?.default?.match(cacheKey);if(hit) return hit;} catch {}
+  const key=String(env.AIRLABS_API_KEY||env.AIRLABS_KEY||'').trim();
+  let result={status:'configuration_required',year_built:null,age_years:null,source:null};
+  if (key) {
+    try {result=await lookupAirLabs(key,hex,registration);}
+    catch {result={status:'airlabs_error',year_built:null,age_years:null,source:null};}
+  }
+  if (result.year_built==null && result.age_years==null) {
+    const fallback=await lookupFAA(hex);
+    if (fallback) result=fallback;
+  }
+  // Sukces buforujemy długo, niedostępność planu/limitu — krótko.
+  const ttl=result.status==='ok'?30*86400:
+    result.status==='configuration_required'?300:
+    ['airlabs_error','quota_exceeded'].includes(result.status)?120:3600;
+  const payload={hex,year_built:result.year_built,age_years:result.age_years,
+    status:result.status,source:result.source,
+    note:'Wiek przybliżony; rok produkcji to nie data pierwszego lotu.'};
+  const response=responseJSON(payload,200,ttl);
+  try {if(typeof context.waitUntil==='function'&&typeof caches!=='undefined'&&caches.default)
+    context.waitUntil(caches.default.put(cacheKey,response.clone()).catch(()=>{}));} catch {}
   return response;
 }
