@@ -21,6 +21,10 @@ const AIRLINES = {
   SAS: ['Scandinavian Airlines', 'SK'], EZY: ['easyJet', 'U2'], ENT: ['Enter Air', 'E4'],
 };
 const num = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const productionYear = value => {
+  const y = Number(value);
+  return Number.isInteger(y) && y >= 1940 && y <= new Date().getUTCFullYear() ? y : null;
+};
 const clean = value => typeof value === 'string' ? value.trim() : '';
 
 function kmBetween(aLat, aLon, bLat, bLon) {
@@ -94,6 +98,7 @@ function normalizeAircraft(raw, center) {
   return {
     hex, flight: callsign || null, registration: clean(raw.r) || null,
     model: clean(raw.t) || null, operator: airline?.[0] || clean(raw.ownOp) || null,
+    year_built: productionYear(raw.year_built ?? raw.built_year ?? raw.year ?? raw.yr),
     airline_iata: airline?.[1] || null,
     lat, lon, km: Math.round(distanceFromCenter(lat, lon, center) * 10) / 10,
     altitude_m: num(raw.alt_baro) === null ? null : Math.round(raw.alt_baro * 0.3048),
@@ -286,6 +291,7 @@ async function enrich(plane, lol, context) {
     ...plane,
     registration: clean(dbPlane.registration) || plane.registration,
     model: clean(dbPlane.type) || plane.model,
+    year_built: productionYear(dbPlane.year_built ?? dbPlane.year_manufactured ?? dbPlane.year ?? plane.year_built),
     operator: caller?.[0] || clean(dbRoute?.airline?.name) || clean(dbPlane.registered_owner) || plane.operator,
     airline_iata: caller?.[1] || (/^[A-Z0-9]{2}$/.test(iata) ? iata : plane.airline_iata),
     from: route?.from || null, to: route?.to || null,
