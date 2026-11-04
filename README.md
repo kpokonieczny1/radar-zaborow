@@ -1,32 +1,47 @@
-# Radar Zaborów 15.0 — kompaktowy interfejs i filtr ruchu naziemnego
+# Radar Zaborów 16.0 – lotniska i przybliżony wiek samolotu
 
-Aktualizacja działającego projektu **Cloudflare Pages** w repozytorium `kpokonieczny1/radar-zaborow`.
+## Zmiany
 
-## Co nowego
+### Oznaczenia lotnisk
 
-1. Niski nagłówek i pojedynczy pasek trzech lokalizacji: **Zaborów**, **Mieszkanie**, **Praca**. Ustawienia współrzędnych, promienia i częstotliwości są domyślnie zwinięte. Zawartość FR24 również można rozwinąć tylko wtedy, kiedy jest potrzebna.
-2. Każda karta lotu ma **zdjęcie po lewej**, a po prawej w kilku wierszach nazwę przewoźnika, znak wywoławczy, lotniska wylotu i przylotu, kod kraju oraz model, rejestrację, numer rejsu (jeśli dostępny), wysokość i prędkość. Karta jest tak zwarta, jak to możliwe przy czytelnej prezentacji wszystkich danych. Przy małej szerokości ekranu wysokość może wzrosnąć.
-3. Odfiltrowano pojazdy obsługi lotniska i obiekty naziemne **jeszcze po stronie API**, zanim trafią na radar. Filtr wykorzystuje kategorię ADS-B (`C0`–`C7`) lub informację o znajdowaniu się na ziemi (`alt_baro: "ground"` / `on_ground: true`). **Samoloty kołujące także są ukrywane; pojawią się, kiedy będą w powietrzu.** Nieznane lub błędne oznaczenia w danych zewnętrznych mogą pozostawić pojedyncze pojazdy na liście.
+Na tarczy radaru pojawiają się nieruchome, żółte znaczniki lotnisk:
 
-## Aktualizacja GitHuba
+- **Lotnisko Chopina / Okęcie** – WAW / EPWA, punkt odniesienia 52.1658333333 N, 20.9672222222 E.
+- **Warszawa-Babice** – QPB / EPBC, punkt odniesienia 52.2691666667 N, 20.9072222222 E.
 
-Należy podmienić **dokładnie dwa pliki**:
+Znaczniki są widoczne **tylko w granicach aktualnego promienia**. Z centrum Zaborowa do Babic jest ok. **15 km**, a do Okęcia ok. **22 km**, dlatego do obserwacji obu lotnisk ustaw promień **co najmniej 25 km**. Punkty są stałe, nie są pobierane z API FR24 i nie zużywają kredytów. Są to punkty referencyjne lotnisk, a nie dokładne końce pasów startowych. Samoloty naziemne nadal są ukrywane przez filtr.
 
-- `index.html` w katalogu głównym repozytorium;
-- `functions/api/flights.js` w katalogu `functions/api/`.
+### Wiek samolotu
 
-Nie trzeba zmieniać plików `functions/api/fr24-routes.js`, `functions/api/airports.js` ani `functions/api/fr24.js`, o ile są już zainstalowane z wersji 14.1. Wersja 15 zachowuje ustawienia FR24, domyślne trzy lokalizacje, zdjęcia, logo, rozpoznawanie Babic `QPB` / `EPBC` i częstotliwość 3 s (albo inną wpisaną przez użytkownika).
+W kompaktowej karcie dodano pole **Wiek**, np. `ok. 7 lat (2019)`.
 
-Wgraj nowe pliki do tych samych katalogów, wykonaj **Commit changes**, poczekaj na wdrożenie w Cloudflare Pages i otwórz `https://radar-zaborow.pages.dev/`. W razie starego wyglądu użyj `Ctrl+F5`.
+- Wiek liczony jest **przybliżenie**: `bieżący rok - rok produkcji`, a nie z dokładnej daty pierwszego lotu.
+- Informacje o roczniku próbowane są najpierw z danych ADS-B (jeżeli dostawca je zwraca), a następnie przez osobną funkcję `aircraft-age.js` z bezpłatnej bazy OpenAirframes (przede wszystkim dane FAA dla rejestracji amerykańskich) i pomocniczo ADSB.lol.
+- Dla części samolotów, szczególnie europejskich, może być pokazane `nieznany` – nie wnioskujemy wieku z typu maszyny ani daty rejestracji.
+- Dane są przechowywane lokalnie na tablecie do 30 dni, a odpowiedzi API mogą być również buforowane przez Cloudflare. FR24 **nie jest wywoływany** w celu ustalania wieku.
 
-## Jak ustawić radary
+## Aktualizacja GitHub / Cloudflare Pages
 
-- Przyciskami w górnym pasku wybierasz lokalizację.
-- Przycisk **⚙ Ustawienia** rozwija pola promienia, współrzędnych i interwału.
-- Przycisk **Trasy FR24** rozwija panel włączania/wyłączania tras. Przechowywanie i zabezpieczenie tokenu FR24 pozostaje bez zmian.
+Zastąp w repozytorium `kpokonieczny1/radar-zaborow`:
 
-## Ograniczenia
+1. Plik główny `index.html` nowym plikiem z tej paczki.
+2. Plik `functions/api/flights.js` nową wersją z tej paczki.
+3. **Dodaj nowy** plik `functions/api/aircraft-age.js` do istniejącego katalogu `functions/api/`.
 
-- Pozycje i kategorie pochodzą z zewnętrznej sieci ADS-B. Filtr jest heurystyczny i nie stanowi gwarancji identyfikacji rodzaju obiektu.
-- Odświeżanie co 3 sekundy to *częstotliwość zapytań*, a nie gwarancja nowych danych w każdej odpowiedzi.
-- Układ i filtr przetestowano na przykładowych danych w środowisku przeglądarkowym; bieżące działanie na produkcyjnym Cloudflare należy sprawdzić po wdrożeniu.
+Pozostałe pliki (`fr24-routes.js`, `airports.js`), sekret FR24 i konfiguracja Cloudflare **pozostają bez zmian**.
+
+Po `Commit changes` poczekaj na automatyczne wdrożenie, otwórz `https://radar-zaborow.pages.dev/` i odśwież stronę z wyczyszczeniem pamięci podręcznej (w Androidzie można zamknąć i ponownie uruchomić stronę).
+
+## Szybki test wieku API
+
+`https://radar-zaborow.pages.dev/api/aircraft-age?hex=AC0CAB`
+
+Gdy baza zna rok, JSON zawiera `year_built` i `age_years`; w innym przypadku pola te mają wartość `null`. Test nie wykorzystuje FR24.
+
+## Źródła i ograniczenia
+
+- Współrzędne EPWA: oficjalny eAIP PANSA, ARP 520957N 0205802E.
+- Współrzędne EPBC: Urząd Lotnictwa Cywilnego, 52°16′09″N 20°54′26″E.
+- Rok produkcji: `https://api.pigeite.com` (OpenAirframes, FAA), metadane ADSB.lol i dostępne pola w aktualnym strumieniu ADS-B.
+
+Testy lokalne obejmują walidację współrzędnych markerów i obecności znaczników przy różnych promieniach, renderowanie wieku i składnię JavaScript. Nie weryfikowano na produkcyjnym Cloudflare dostępności zewnętrznych baz.

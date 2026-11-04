@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 15.1 · radar i loty obok siebie</title>
+  <title>Radar Zaborów 16.0 · lotniska i wiek samolotów</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -242,6 +242,14 @@
       .flightBottom{font-size:10px;gap:2px 6px}
     }
 
+    /* 16.0: stałe punkty lotnisk - inne oznaczenia niż samoloty. */
+    .radar .airportPoint{fill:#ffcc72;stroke:#563e1b;stroke-width:1.5}
+    .radar .airportRunway{stroke:#53390f;stroke-width:2;stroke-linecap:round}
+    .radar .airportLabel{font-size:11px;fill:#ffe2a4;font-weight:750;
+      paint-order:stroke;stroke:#0b2436;stroke-width:3.5px;stroke-linejoin:round}
+    .radar .airportCode{font-size:9px;fill:#f4d5a1;font-weight:650;
+      paint-order:stroke;stroke:#0b2436;stroke-width:3px;stroke-linejoin:round}
+    .flightBottom .ageMetric .microValue{color:#f9dd9f}
     /* 15.1: obie kolumny pozostają obok siebie także w pionowym układzie Androida.
        Węższe urządzenia mogą przesunąć TYLKO pulpit w poziomie, zamiast
        przenosić listę lotów pod radar. Nadpisujemy wcześniejsze breakpointy. */
@@ -366,9 +374,10 @@
         <text id="rangeLabel" x="205" y="35">10 km</text>
         <circle cx="200" cy="200" r="5" fill="#f8c56f"/>
         <text id="radarCenterName" x="211" y="212">Zaborów</text>
+        <g id="airports"></g>
         <g id="dots"></g>
       </svg>
-      <div class="radarLegend"><span>✈ Nosem wskazuje kierunek lotu</span><span>ⓘ Znak ? – brak danych o kierunku</span></div>
+      <div class="radarLegend"><span>◆ Okęcie i Babice · ✈ kierunek lotu</span><span>ⓘ Znak ? – brak danych o kierunku</span></div>
       <div class="stats" id="radarStats">
         <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
         <div class="stat"><strong id="allCount">—</strong><span>W wybranym zasięgu</span></div>
@@ -383,6 +392,7 @@
   </div>
 
   <footer class="foot">
+    Wiek: szacunkowo na podstawie roku produkcji (OpenAirframes/FAA i dostępne dane ADS-B); brak rocznika = „nieznany”.
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
     ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
     Nazwy i kody krajów lotnisk: OurAirports i AirportMiles (dane otwarte), uzupełniająco baza lokalna.
@@ -516,6 +526,15 @@ function compactMetric(label, value, role = '') {
   return `<span class="microStat"><span class="microLabel">${escapeHtml(label)}:</span>`
     + `<strong class="microValue"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</strong></span>`;
 }
+function ageLabel(plane) {
+  // Rok produkcji nie oznacza dokładnej daty pierwszego lotu.
+  const h = String(plane.hex || '').toUpperCase();
+  const info = ageRecords.get(h);
+  const y = Number(info?.year_built || plane.year_built);
+  const now = new Date().getFullYear();
+  if (!Number.isInteger(y) || y < 1940 || y > now) return 'nieznany';
+  return `ok. ${now - y} lat (${y})`;
+}
 function flightCard(f) {
   const near = f.km <= 10;
   const company = flightDetails(f);
@@ -534,6 +553,7 @@ function flightCard(f) {
       <div class="flightBottom">
         ${compactMetric('Typ', f.model)}
         ${compactMetric('Rej.', f.registration)}
+        <span class="ageMetric">${compactMetric('Wiek', ageLabel(f))}</span>
         ${f.flight_number ? compactMetric('Rejs', f.flight_number) : ''}
         ${compactMetric('Wys.', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
         ${compactMetric('Pręd.', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
@@ -575,6 +595,18 @@ function renderCenter() {
 }
 renderCenter();
 
+// Cache wieku w pamięci urządzenia: wynik pozytywny przez 30 dni,
+// brak danych przez 24 godziny. Zapytania nie korzystają z FR24.
+const ageRecords = new Map();
+try {
+  const saved = JSON.parse(localStorage.getItem('radar-aircraft-age-v1') || '{}');
+  for (const [hex, entry] of Object.entries(saved)) {
+    const ttl = entry?.year_built ? 30*86400000 : 86400000;
+    if (/^[A-F0-9]{6}$/.test(hex) && entry && Date.now() - entry.checked_at < ttl)
+      ageRecords.set(hex, entry);
+  }
+} catch { /* brak pamięci przeglądarki */ }
+let ageBusy = false;
 let current = [];
 let meta = new Map();
 let timer = null;
@@ -642,9 +674,37 @@ function merged(plane) {
     flight_number: null,
   };
 }
+const LOCAL_AIRPORTS = Object.freeze([
+  {name:'Okęcie', iata:'WAW', icao:'EPWA', lat:52.1658333333, lon:20.9672222222},
+  {name:'Babice', iata:'QPB', icao:'EPBC', lat:52.2691666667, lon:20.9072222222},
+]);
+function radarAirports() {
+  const airportSvg = LOCAL_AIRPORTS.map(a => {
+    const dx = (a.lon - center.lon) * Math.cos(center.lat * DEG) * 111.2;
+    const dy = (a.lat - center.lat) * 111.2;
+    const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
+    if (Math.hypot(x - 200, y - 200) > 178) return '';
+    const isRight = x > 295 || (a.icao === 'EPBC' && x > 125);
+    const labelX = (x + (isRight ? -12 : 12)).toFixed(1);
+    const anchor = isRight ? 'end' : 'start';
+    const below = y < 43;
+    const titleY = (y + (below ? 17 : -8)).toFixed(1);
+    const codeY = (y + (below ? 29 : 4)).toFixed(1);
+    return `<g><title>Lotnisko ${a.name} · ${a.iata}/${a.icao}</title>
+      <g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
+        <circle class="airportPoint" r="6"/>
+        <path class="airportRunway" d="M-3 -3 L3 3 M-3 3 L3 -3"/>
+      </g>
+      <text class="airportLabel" text-anchor="${anchor}" x="${labelX}" y="${titleY}">${a.name}</text>
+      <text class="airportCode" text-anchor="${anchor}" x="${labelX}" y="${codeY}">${a.iata} / ${a.icao}</text>
+    </g>`;
+  }).join('');
+  el('airports').innerHTML = airportSvg;
+}
 function radarPoints() {
   el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
   el('rangeLabel').textContent = radius.toLocaleString('pl-PL') + ' km';
+  radarAirports();
   let svg = '';
   for (const f of current) {
     if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
@@ -776,6 +836,38 @@ async function enrichIfNeeded(epoch) {
     void enrichRoutesIfNeeded(epoch);
   } catch { /* dane pozycyjne będą działać niezależnie od metadanych */ }
   finally { detailInFlight = false; }
+}
+async function enrichAgeIfNeeded(epoch) {
+  if (ageBusy || document.hidden) return;
+  const candidates = current.filter(f => !f.year_built)
+    .map(f => String(f.hex || '').replace(/^~/, '').toUpperCase())
+    .filter(h => /^[A-F0-9]{6}$/.test(h) && !ageRecords.has(h));
+  const unique = [...new Set(candidates)].slice(0, 8);
+  if (!unique.length) return;
+  ageBusy = true;
+  try {
+    for (const hex of unique) {
+      if (epoch !== requestEpoch || document.hidden) break;
+      // Nie wykonujemy równoległych serii zapytań do darmowej bazy.
+      let entry = {year_built:null, source:null, checked_at:Date.now()};
+      try {
+        const response = await fetch(`/api/aircraft-age?hex=${encodeURIComponent(hex)}`, {cache:'no-store'});
+        if (response.ok) {
+          const data = await response.json();
+          entry = {year_built:data.year_built ?? null, source:data.source ?? null, checked_at:Date.now()};
+        }
+      } catch { /* brak danych - ponowna próba innego dnia */ }
+      if (epoch !== requestEpoch) break;
+      ageRecords.set(hex, entry);
+      if (ageRecords.size > 300) {
+        const oldest = ageRecords.keys().next().value;
+        ageRecords.delete(oldest);
+      }
+      try {localStorage.setItem('radar-aircraft-age-v1', JSON.stringify(Object.fromEntries(ageRecords)));} catch {}
+      // Dotykamy tylko kart, nie pobieramy ponownie zdjęć ani tras.
+      if (current.some(f => String(f.hex || '').toUpperCase() === hex)) paintCards(true);
+    }
+  } finally { ageBusy = false; }
 }
 function fr24Key(f) {
   return `${k(f)}|${String(f.flight || '').toUpperCase()}`;
@@ -929,6 +1021,7 @@ async function pollPositions() {
     el('status').textContent = `● Radar działa · ${data.source || 'ADS-B'}`;
     el('status').className = 'pill';
     void enrichIfNeeded(epoch);
+    void enrichAgeIfNeeded(epoch);
     void enrichRoutesIfNeeded(epoch);
     void enrichAirports();
   } catch (error) {
@@ -1031,6 +1124,7 @@ document.addEventListener('visibilitychange', () => {
     void pollPositions();
   }
 });
+radarPoints();
 void pollPositions();
 </script>
 </body>
