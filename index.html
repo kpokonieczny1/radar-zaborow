@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 17.0 · lotniska i wiek samolotów</title>
+  <title>Radar Zaborów 17.2 · wiek tylko gdy dostępny</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -392,7 +392,7 @@
   </div>
 
   <footer class="foot">
-    Wiek: szacunkowo na podstawie roku produkcji (OpenAirframes/FAA i dostępne dane ADS-B); brak rocznika = „nieznany”.
+    Wiek: orientacyjnie na podstawie roku produkcji konkretnego samolotu (jeśli dane są dostępne).
     Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
     ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
     Nazwy i kody krajów lotnisk: OurAirports i AirportMiles (dane otwarte), uzupełniająco baza lokalna.
@@ -527,24 +527,22 @@ function compactMetric(label, value, role = '') {
     + `<strong class="microValue"${role ? ` data-role="${role}"` : ''}>${escapeHtml(textOrDash(value))}</strong></span>`;
 }
 function ageLabel(plane) {
-  // Prawidłowy rocznik konkretnej maszyny, a nie typ czy data rejestracji.
-  const h=String(plane.hex||'').replace(/^~/,'').toUpperCase();
-  const info=ageRecords.get(h);
-  const y=Number(info?.year_built ?? plane.year_built ?? 0);
-  const now=new Date().getFullYear();
-  if (Number.isInteger(y) && y>=1940 && y<=now) return `ok. ${now-y} lat (${y})`;
-  const a=Number(info?.age_years);
-  if (info?.age_years != null && Number.isFinite(a) && a>=0 && a<110) return `ok. ${Math.floor(a)} lat`;
-  if (info?.status==='configuration_required') return 'dodaj klucz AirLabs';
-  if (info?.status==='access_denied') return 'brak dostępu do wieku';
-  if (info?.status==='fields_unavailable') return 'brak danych w AirLabs';
-  if (info?.status==='quota_exceeded') return 'limit AirLabs';
-  if (info?.status==='airlabs_error') return 'błąd API wieku';
-  return 'nieznany';
+  // Nie pokazujemy pola, jeśli nie mamy wiarygodnego roku konkretnej maszyny.
+  const hex = String(plane.hex || '').replace(/^~/, '').toUpperCase();
+  const info = ageRecords.get(hex);
+  const year = Number(info?.year_built ?? plane.year_built);
+  const thisYear = new Date().getFullYear();
+  if (Number.isInteger(year) && year >= 1940 && year <= thisYear)
+    return `ok. ${thisYear - year} lat (${year})`;
+  const age = Number(info?.age_years);
+  if (info?.age_years != null && Number.isFinite(age) && age >= 0 && age <= 110)
+    return `ok. ${Math.floor(age)} lat`;
+  return null;
 }
 function flightCard(f) {
   const near = f.km <= 10;
   const company = flightDetails(f);
+  const knownAge = ageLabel(f);
   const distance = `${escapeHtml(f.km)} km${near ? ' · strefa 10 km' : ''}`;
   return `<article class="flight" data-flight-key="${escapeHtml(k(f))}">
     <div class="flightPhoto">${photoHTML(f)}</div>
@@ -560,7 +558,7 @@ function flightCard(f) {
       <div class="flightBottom">
         ${compactMetric('Typ', f.model)}
         ${compactMetric('Rej.', f.registration)}
-        <span class="ageMetric">${compactMetric('Wiek', ageLabel(f))}</span>
+        ${knownAge ? `<span class="ageMetric">${compactMetric('Wiek', knownAge)}</span>` : ''}
         ${f.flight_number ? compactMetric('Rejs', f.flight_number) : ''}
         ${compactMetric('Wys.', f.altitude_m == null ? null : f.altitude_m.toLocaleString('pl-PL') + ' m', 'alt')}
         ${compactMetric('Pręd.', f.speed_kmh == null ? null : f.speed_kmh + ' km/h', 'speed')}
@@ -602,15 +600,13 @@ function renderCenter() {
 }
 renderCenter();
 
-// Cache wieku w pamięci urządzenia: wynik pozytywny przez 30 dni,
-// brak danych przez 24 godziny. Zapytania nie korzystają z FR24.
+// Bezpłatny wiek (jeśli jest dostępny) nie korzysta z płatnych API.
+// Pozytywne dane pamiętamy 30 dni, brak rekordu 6 godzin.
 const ageRecords = new Map();
 try {
-  const saved = JSON.parse(localStorage.getItem('radar-aircraft-age-v2') || '{}');
+  const saved = JSON.parse(localStorage.getItem('radar-aircraft-age-v3') || '{}');
   for (const [hex, entry] of Object.entries(saved)) {
-    const ttl = (entry?.year_built || entry?.age_years != null) ? 30*86400000
-      : (entry?.status === 'configuration_required' ? 5*60000 :
-         ['quota_exceeded','airlabs_error'].includes(entry?.status) ? 2*60000 : 60*60000);
+    const ttl = (entry?.year_built || entry?.age_years != null) ? 30*86400000 : 6*3600000;
     if (/^[A-F0-9]{6}$/.test(hex) && entry && Date.now() - entry.checked_at < ttl)
       ageRecords.set(hex, entry);
   }
@@ -833,7 +829,7 @@ async function enrichIfNeeded(epoch) {
     if (epoch !== requestEpoch) return;
     for (const f of data.flights || []) {
       meta.set(k(f), {
-        registration:f.registration, model:f.model, operator:f.operator,
+        registration:f.registration, model:f.model, year_built:f.year_built, operator:f.operator,
         airline_iata:f.airline_iata, from:f.from, to:f.to,
         route_status:f.route_status, route_source:f.route_source, route_plausible:f.route_plausible, photo:f.photo, photo_fallback:f.photo_fallback,
       });
@@ -848,7 +844,7 @@ async function enrichIfNeeded(epoch) {
 }
 async function enrichAgeIfNeeded(epoch) {
   if (ageBusy || document.hidden) return;
-  // Rejestracja poprawia wyszukiwanie globalne w AirLabs.
+  // Szybkie wyszukanie ICAO24; osobne API nie korzysta z płatnych źródeł.
   const candidates = current.filter(f => !f.year_built)
     .map(f => ({hex:String(f.hex || '').replace(/^~/,'').toUpperCase(),
       registration:String(f.registration || '').trim().toUpperCase()}))
@@ -860,7 +856,7 @@ async function enrichAgeIfNeeded(epoch) {
     for (const candidate of unique) {
       const {hex,registration}=candidate;
       if (epoch !== requestEpoch || document.hidden) break;
-      // Nie wykonujemy równoległych serii zapytań do bazy flot.
+      // Nie wykonujemy równoległych serii zapytań o wiek.
       let entry = {year_built:null, age_years:null,source:null,status:'not_found',checked_at:Date.now()};
       try {
         const params = new URLSearchParams({hex});
@@ -870,7 +866,7 @@ async function enrichAgeIfNeeded(epoch) {
           const data = await response.json();
           entry = {year_built:data.year_built ?? null,age_years:data.age_years ?? null,
             status:data.status || 'not_found',source:data.source ?? null,checked_at:Date.now()};
-        } else entry.status='airlabs_error';
+        } else entry.status='lookup_error';
       } catch { /* brak danych - ponowna próba innego dnia */ }
       if (epoch !== requestEpoch) break;
       ageRecords.set(hex, entry);
@@ -878,7 +874,7 @@ async function enrichAgeIfNeeded(epoch) {
         const oldest = ageRecords.keys().next().value;
         ageRecords.delete(oldest);
       }
-      try {localStorage.setItem('radar-aircraft-age-v2', JSON.stringify(Object.fromEntries(ageRecords)));} catch {}
+      try {localStorage.setItem('radar-aircraft-age-v3', JSON.stringify(Object.fromEntries(ageRecords)));} catch {}
       // Dotykamy tylko kart, nie pobieramy ponownie zdjęć ani tras.
       if (current.some(f => String(f.hex || '').toUpperCase() === hex)) paintCards(true);
     }
