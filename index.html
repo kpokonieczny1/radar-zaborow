@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 17.2 · wiek tylko gdy dostępny</title>
+  <title>Radar Zaborów 18.0 · podkład OpenStreetMap</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -307,6 +307,13 @@
       .stat span {font-size:9px}
       .radarLegend {font-size:9px;gap:4px}
     }
+
+    /* 18.0: cichy podkład OSM, bez przesłaniania symboli lotów. */
+    .radar .osmTiles {opacity:.88;filter:grayscale(.6) saturate(.55) brightness(.86);pointer-events:none}
+    .radar .mapShade {fill:#071625;fill-opacity:.51;pointer-events:none}
+    .osmAttribution {font-size:9px;color:#93a9c0;text-align:right;margin-top:-2px;
+      margin-bottom:4px;line-height:1.3}
+    .osmAttribution a {color:#bbd3e9;text-decoration:underline;text-underline-offset:2px}
   </style>
 </head>
 <body>
@@ -364,7 +371,12 @@
     <section class="panel" aria-label="Radar pozycji">
       <div class="sectionHead"><h2 id="radarTitle">Pozycje</h2><span class="pill" id="count">—</span></div>
       <svg class="radar" id="radar" viewBox="0 0 400 400" role="img" aria-label="Pozycje samolotów wokół środka radaru">
+        <defs>
+          <clipPath id="radarMapClip"><circle cx="200" cy="200" r="178"/></clipPath>
+        </defs>
         <circle cx="200" cy="200" r="178" fill="#102a38"/>
+        <g id="mapTiles" class="osmTiles" clip-path="url(#radarMapClip)" aria-hidden="true"></g>
+        <circle class="mapShade" cx="200" cy="200" r="178"/>
         <circle class="zone" id="zone10" cx="200" cy="200" r="178"/>
         <circle class="ring" id="ringHalf" cx="200" cy="200" r="89"/>
         <circle class="ring" cx="200" cy="200" r="178"/>
@@ -377,6 +389,7 @@
         <g id="airports"></g>
         <g id="dots"></g>
       </svg>
+      <div class="osmAttribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></div>
       <div class="radarLegend"><span>◆ Okęcie i Babice · ✈ kierunek lotu</span><span>ⓘ Znak ? – brak danych o kierunku</span></div>
       <div class="stats" id="radarStats">
         <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
@@ -683,11 +696,77 @@ const LOCAL_AIRPORTS = Object.freeze([
   {name:'Okęcie', iata:'WAW', icao:'EPWA', lat:52.1658333333, lon:20.9672222222},
   {name:'Babice', iata:'QPB', icao:'EPBC', lat:52.2691666667, lon:20.9072222222},
 ]);
+
+// Kafelki OSM i znaczniki korzystają z tej samej projekcji EPSG:3857.
+// Dzięki temu zmiana środka i promienia nie rozjeżdża ikon z drogami.
+const TILE_URL = 'https://tile.openstreetmap.org';
+const MERCATOR_LAT_MAX = 85.05112878;
+let cachedMap = null;
+function mercatorPixels(lat, lon, zoom) {
+  const safeLat = Math.max(-MERCATOR_LAT_MAX, Math.min(MERCATOR_LAT_MAX, lat));
+  const world = 256 * 2 ** zoom;
+  const φ = safeLat * DEG;
+  return {
+    x: (lon + 180) / 360 * world,
+    y: (1 - Math.asinh(Math.tan(φ)) / Math.PI) / 2 * world,
+  };
+}
+function radarMapGeometry() {
+  const key = [center.lat, center.lon, radius].join('|');
+  if (cachedMap?.key === key) return cachedMap;
+  const centerLat = Math.max(-MERCATOR_LAT_MAX, Math.min(MERCATOR_LAT_MAX, center.lat));
+  const metersPerSvgUnit = radius * 1000 / 178;
+  const metersPerPxAtZoom0 = 156543.033928 * Math.cos(centerLat * DEG);
+  const zoom = Math.max(2, Math.min(17, Math.round(Math.log2(metersPerPxAtZoom0 / metersPerSvgUnit))));
+  const metersPerTilePx = metersPerPxAtZoom0 / (2 ** zoom);
+  cachedMap = {
+    key, zoom, world:256 * 2 ** zoom,
+    scale:metersPerTilePx / metersPerSvgUnit,
+    cp:mercatorPixels(centerLat, center.lon, zoom),
+  };
+  return cachedMap;
+}
+function projectOnRadar(lat, lon) {
+  const g = radarMapGeometry();
+  const p = mercatorPixels(lat, lon, g.zoom);
+  let dx = p.x - g.cp.x;
+  // Gdy środek jest przy południku 180°, przechodzimy krótszą drogą.
+  if (dx > g.world / 2) dx -= g.world;
+  if (dx < -g.world / 2) dx += g.world;
+  return {x:200 + dx * g.scale, y:200 + (p.y - g.cp.y) * g.scale};
+}
+function drawMapTiles() {
+  const g = radarMapGeometry();
+  const layer = el('mapTiles');
+  if (layer.dataset.key === g.key) return; // brak przeładowania kafelków co 3 s
+  const left = Math.floor((g.cp.x - 178 / g.scale) / 256);
+  const right = Math.floor((g.cp.x + 178 / g.scale) / 256);
+  const top = Math.floor((g.cp.y - 178 / g.scale) / 256);
+  const bottom = Math.floor((g.cp.y + 178 / g.scale) / 256);
+  const maxTile = 2 ** g.zoom;
+  const tileSize = 256 * g.scale;
+  let tiles = '';
+  for (let ty = top; ty <= bottom; ty++) {
+    if (ty < 0 || ty >= maxTile) continue;
+    for (let tx = left; tx <= right; tx++) {
+      const x = 200 + (tx * 256 - g.cp.x) * g.scale;
+      const y = 200 + (ty * 256 - g.cp.y) * g.scale;
+      // Nie pobieraj kafelków, które nawet nie stykają się z kołem radaru.
+      const nearX = Math.max(x, Math.min(200, x + tileSize));
+      const nearY = Math.max(y, Math.min(200, y + tileSize));
+      if (Math.hypot(nearX - 200, nearY - 200) >= 178) continue;
+      const wrappedX = ((tx % maxTile) + maxTile) % maxTile;
+      const src = `${TILE_URL}/${g.zoom}/${wrappedX}/${ty}.png`;
+      tiles += `<image href="${src}" x="${x.toFixed(3)}" y="${y.toFixed(3)}" `
+        + `width="${tileSize.toFixed(3)}" height="${tileSize.toFixed(3)}" preserveAspectRatio="none"/>`;
+    }
+  }
+  layer.innerHTML = tiles;
+  layer.dataset.key = g.key;
+}
 function radarAirports() {
   const airportSvg = LOCAL_AIRPORTS.map(a => {
-    const dx = (a.lon - center.lon) * Math.cos(center.lat * DEG) * 111.2;
-    const dy = (a.lat - center.lat) * 111.2;
-    const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
+    const {x, y} = projectOnRadar(a.lat, a.lon);
     if (Math.hypot(x - 200, y - 200) > 178) return '';
     const isRight = x > 295 || (a.icao === 'EPBC' && x > 125);
     const labelX = (x + (isRight ? -12 : 12)).toFixed(1);
@@ -707,15 +786,14 @@ function radarAirports() {
   el('airports').innerHTML = airportSvg;
 }
 function radarPoints() {
+  drawMapTiles();
   el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
   el('rangeLabel').textContent = radius.toLocaleString('pl-PL') + ' km';
   radarAirports();
   let svg = '';
   for (const f of current) {
     if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
-    const dx = (f.lon - center.lon) * Math.cos(center.lat * DEG) * 111.2;
-    const dy = (f.lat - center.lat) * 111.2;
-    const x = 200 + dx / radius * 178, y = 200 - dy / radius * 178;
+    const {x, y} = projectOnRadar(f.lat, f.lon);
     if (Math.hypot(x - 200, y - 200) > 178) continue;
     const px = x.toFixed(1), py = y.toFixed(1);
     const near = f.km <= 10;

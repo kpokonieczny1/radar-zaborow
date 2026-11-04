@@ -1,27 +1,15 @@
-# Radar Zaborów 17.2 — wiek tylko gdy znany
+# Radar Zaborów 18.0 – przyciemniony podkład OSM
 
-Aktualizacja **bez AirLabs**, bez zmian w pozycjach, trasach FR24, zdjęciach,
-lotniskach, współrzędnych i układzie.
+Aktualizacja po wersji 17.2: **podmień tylko plik `index.html`** w głównym katalogu repozytorium `kpokonieczny1/radar-zaborow` i zatwierdź Commit changes. Cloudflare Pages wdroży go automatycznie. Pozostałe pliki `functions/api/*.js`, tokeny i ustawienia FR24 pozostają bez zmian.
 
-## Wgraj tylko dwa pliki
+## Zmiana
+- Pod okręgami i samolotami rysowane są kafelki OpenStreetMap, przyciemnione i odbarwione, aby nie konkurowały z symbolami lotów.
+- Radar pozostaje skierowany na północ, a ikony samolotów zachowują obrót zgodny z kursem ADS-B.
+- Znaczniki WAW/EPWA oraz QPB/EPBC nadal są widoczne, gdy mieszczą się w promieniu.
+- Kafelki zmieniają się tylko po zmianie współrzędnych środka albo promienia; szybkie odświeżanie pozycji nie powoduje przeładowania mapy.
+- Wyświetlana jest wymagana atrybucja © OpenStreetMap contributors.
 
-1. Zastąp w repozytorium GitHub główny `index.html` plikiem z tego archiwum.
-2. Zastąp `functions/api/aircraft-age.js` nową wersją z tego archiwum.
-3. Zatwierdź zmiany przez **Commit changes**. Cloudflare Pages wdroży projekt.
-4. Na tablecie odśwież stronę, najlepiej po zamknięciu i ponownym otwarciu.
+## Uwagi
+Do pobrania podkładu tablet musi mieć internet. Gdy mapy nie da się pobrać, pozostaje ciemne tło i aktywna warstwa radaru. Nie pobieramy kafelków masowo ani offline. Warunki użytkowania: https://operations.osmfoundation.org/policies/tiles/.
 
-## Co się zmienia
-
-- Dla samolotów z rozpoznanym rokiem produkcji widoczny jest `Wiek: ok. N lat (RRRR)`.
-- Dla pozostałych **nie jest wyświetlane w ogóle pole wieku**, również przy błędach API.
-- Endpoint próbuje odczytać rok produkcji z OpenAirframes/FAA i opcjonalnych metadanych ADSB.lol.
-- Zapytania nie korzystają ani z AirLabs, ani z FR24; nie zużywają ich kredytów.
-- Brak wieku zapamiętujemy na 6 godzin, znaleziony rok na 30 dni.
-- Usunięcie sekretu `AIRLABS_API_KEY` w Cloudflare jest opcjonalne; nowy kod go ignoruje.
-
-## Diagnostyka
-
-`https://radar-zaborow.pages.dev/api/aircraft-age?hex=48E973`
-
-Jeżeli pojawi się `status: not_found`, radar nie pokaże pola wieku.
-To prawidłowe zachowanie dla samolotu, którego rocznik nie jest dostępny w tych źródłach.
+Przetestuj w przeglądarce po aktualizacji i użyj Ctrl+F5 przy wyświetleniu starej wersji. Na urządzeniu Android odśwież stronę lub zamknij i ponownie uruchom kartę.
