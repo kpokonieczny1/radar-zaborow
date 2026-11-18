@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 20.0 · FR24 + oszczędzanie kredytów</title>
+  <title>Radar Zaborów 20.2 · odświeżanie adaptacyjne</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -339,7 +339,7 @@
       margin-bottom:4px;line-height:1.3}
     .osmAttribution a {color:#bbd3e9;text-decoration:underline;text-underline-offset:2px}
 
-    /* Radar 20.0: mały przełącznik pracy i licznik. */
+    /* Radar 20.2: mały przełącznik pracy, adaptacyjny interwał i licznik. */
     .powerButton{background:#184737;border:1px solid #3a9668;white-space:nowrap;min-height:33px;padding:6px 9px}
     .powerButton.off{background:#69402e;border-color:#af795a}
     .creditsMini{display:flex;align-items:center;gap:7px;background:#0c1d31;border:1px solid #36506b;border-radius:8px;padding:4px 6px;min-height:32px}
@@ -347,7 +347,7 @@
     .creditsMini small{font-size:9px;color:#b7cce0;max-width:155px}
     .creditsMini button{padding:1px 6px;min-height:24px;font-size:12px}
     .header{margin-bottom:5px}.controls{margin-bottom:8px}
-    @media(max-width:720px){.creditsMini small{display:none}.creditsMini strong{font-size:10px}}
+    @media(max-width:720px){.creditsMini small{display:block;font-size:9px;max-width:125px;line-height:1.2}.creditsMini strong{font-size:10px}}
     .pauseNotice{padding:32px 12px;text-align:center;color:#bcd1e5;font-size:14px}
   </style>
 </head>
@@ -368,14 +368,14 @@
       <button type="button" id="radarPower" class="powerButton" aria-pressed="true">⏸ Wyłącz radar</button>
       <div class="creditsMini" aria-label="Kredyty Flightradar24">
         <strong id="creditsUsed">Kredyty: —</strong>
-        <small id="creditsLeft">FR24 · ostatnie 30 dni</small>
+        <small id="creditsLeft" title="Ostatni odczyt raportu zużycia; nie jest to saldo abonamentu">Sprawdzono: —</small>
         <button type="button" id="creditsCheck" class="secondaryButton" title="Pobierz bieżący raport zużycia FR24">↻</button>
       </div>
       <span class="quickBarName">Środek:</span>
       <button type="button" class="centerChoice" id="restoreCenter">Zaborów</button>
       <button type="button" class="centerChoice" id="centerApartment">Mieszkanie</button>
       <button type="button" class="centerChoice" id="centerWork">Praca</button>
-      <span class="quickSummary" id="quickSummary">Promień 10 km · ruch 1 s · odczyt FR24 co 180 s</span>
+      <span class="quickSummary" id="quickSummary">Promień 10 km · ruch 1 s · bez lotów 60 s / z lotami 30 s</span>
       <button type="button" id="settingsToggle" aria-controls="settingsForm" aria-expanded="false">⚙ Ustawienia</button>
       <div hidden id="fr24Config"><span id="fr24Chip"></span><span id="fr24Info"></span><button type="button" id="fr24Toggle">FR24</button></div>
     </div>
@@ -393,8 +393,12 @@
         <input class="settingInput" id="longitudeInput" type="text" inputmode="decimal" autocomplete="off" value="20.68608333" aria-describedby="coordsHint">
       </div>
       <div class="settingField interval">
-        <label for="activeIntervalInput">Odczyt FR24 (s)</label>
-        <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="120" max="900" step="30" value="180">
+        <label for="idleIntervalInput">Brak samolotów (s)</label>
+        <input class="settingInput" id="idleIntervalInput" type="number" inputmode="numeric" min="30" max="900" step="10" value="60">
+      </div>
+      <div class="settingField interval">
+        <label for="activeIntervalInput">Są samoloty (s)</label>
+        <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="30" max="900" step="10" value="30">
       </div>
       <div class="settingField mapToggle">
         <label class="mapCheckbox" for="mapEnabledInput"><input id="mapEnabledInput" type="checkbox" checked> Podkład OSM</label>
@@ -407,7 +411,7 @@
       <span id="settingsError" class="settingsError" role="alert" aria-live="polite"></span>
       <div class="settingsStatus">
         <span id="coordsHint" class="hint">Współrzędne dziesiętne lub stopnie/minuty/sekundy (np. 52 15 46,6).</span>
-        <span class="speed" id="refreshInfo">FR24 co 180 s · animacja co 1 s</span>
+        <span class="speed" id="refreshInfo">FR24 co 60 s bez lotów / 30 s z lotami · animacja 1 s</span>
       </div>
     </form>
   </nav>
@@ -473,7 +477,7 @@ function centerLabel(c) {
 const DEG = Math.PI / 180;
 const IDLE_MS = 300000;
 const ANIMATION_MS = 1000;
-const MAX_PREDICTION_MS = 240000;
+const MAX_PREDICTION_MS = 90000; // nie przedłużaj szacowania przez wiele minut przy błędzie API
 const METADATA_MS = 90000;      // zdjęcia i trasy najwyżej raz na 90 s
 const NEW_PLANE_METADATA_MS = 15000;
 const el = id => document.getElementById(id);
@@ -489,7 +493,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const textOrDash = value => value == null || value === '' ? 'Brak danych' : String(value);
 const goodRadius = n => Number.isFinite(n) && n >= 1 && n <= 200;
-const goodInterval = n => Number.isInteger(n) && n >= 120 && n <= 900;
+const goodInterval = n => Number.isInteger(n) && n >= 30 && n <= 900;
 const formatCoord = n => n.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 // Współrzędne: 52.26294444 lub 52 15 46,6; opcjonalnie N/S/E/W.
 function parseCoord(value, limit) {
@@ -635,22 +639,26 @@ function flightCard(f) {
 
 let radius = 10;
 let center = { ...DEFAULT_CENTER };
-let activeMs = 180000;
+let activeMs = 30000;
+let idleMs = 60000;
 try {
   const savedRadius = Number(localStorage.getItem('radar-zaborow-radius'));
   const savedLat = Number(localStorage.getItem('radar-zaborow-lat'));
   const savedLon = Number(localStorage.getItem('radar-zaborow-lon'));
-  const savedInterval = Number(localStorage.getItem('radar-zaborow-fr24-interval-seconds'));
+  const savedInterval = Number(localStorage.getItem('radar-zaborow-fr24-active-seconds-v20_2'));
+  const savedIdle = Number(localStorage.getItem('radar-zaborow-fr24-idle-seconds-v20_2'));
   if (goodRadius(savedRadius)) radius = savedRadius;
   if (localStorage.getItem('radar-zaborow-lat') !== null && localStorage.getItem('radar-zaborow-lon') !== null
     && Number.isFinite(savedLat) && Number.isFinite(savedLon)
     && Math.abs(savedLat) <= 90 && Math.abs(savedLon) <= 180) center = {lat:savedLat, lon:savedLon};
   if (goodInterval(savedInterval)) activeMs = savedInterval * 1000;
+  if (goodInterval(savedIdle)) idleMs = savedIdle * 1000;
 } catch { /* pamięć opcjonalna */ }
 el('radiusInput').value = String(radius);
 el('latitudeInput').value = formatCoord(center.lat);
 el('longitudeInput').value = formatCoord(center.lon);
 el('activeIntervalInput').value = String(activeMs / 1000);
+el('idleIntervalInput').value = String(idleMs / 1000);
 function renderCenter() {
   const label = centerLabel(center);
   for (const [name, id] of [['Zaborów','restoreCenter'], ['Mieszkanie','centerApartment'], ['Praca','centerWork']]) {
@@ -658,7 +666,7 @@ function renderCenter() {
     el(id).classList.toggle('isCurrent', selected);
     el(id).setAttribute('aria-pressed', String(selected));
   }
-  el('quickSummary').textContent = `Promień ${radius.toLocaleString('pl-PL')} km · ruch 1 s · dane ${activeMs / 1000} s`;
+  el('quickSummary').textContent = `Promień ${radius.toLocaleString('pl-PL')} km · ruch 1 s · bez samolotów ${idleMs/1000} s / z samolotami ${activeMs/1000} s`;
   const display = `${formatCoord(center.lat)}°, ${formatCoord(center.lon)}°`;
   el('centerSubtitle').textContent = `Samoloty · ${label} · ${display}`;
   el('radarCenterName').textContent = label === 'Własny środek' ? 'Środek' : label;
@@ -683,6 +691,8 @@ let positionsReceivedMs = 0;
 let meta = new Map();
 let timer = null;
 let positionAbort = null;
+let positionInFlight = false;
+let restartAfterFlight = false;
 let detailAbort = null;
 let detailInFlight = false;
 let lastDetailAttempt = 0;
@@ -900,15 +910,28 @@ function aircraftMarker(x,y,heading,near,kind) {
   return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${heading.toFixed(1)})">
     <path class="${cls}" d="${shape}" ${mark}/>${details}</g>`;
 }
-function radarPoints() {
+// Ten sam zestaw widocznych samolotów zasila radar ORAZ listę.
+// Samolot, który wyleciał poza promień (także według płynnej predykcji),
+// znika z obu miejsc przy najbliższej klatce animacji (1 s).
+function visiblePredictions(now = Date.now()) {
+  return current.map(f => predictPosition(f, now)).filter(f => {
+    if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon) || !Number.isFinite(f.km) || f.km > radius) return false;
+    const {x,y} = projectOnRadar(f.lat,f.lon);
+    return Math.hypot(x - 200,y - 200) <= 178;
+  });
+}
+function updateVisibleCounts(visible) {
+  el('count').textContent = visible.length + ' samolotów';
+  el('nearCount').textContent = String(visible.filter(f => f.km <= 10).length);
+  el('allCount').textContent = String(visible.length);
+}
+function radarPoints(visible = visiblePredictions()) {
   drawMapTiles();
   el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
   el('rangeLabel').textContent = radius.toLocaleString('pl-PL') + ' km';
   radarAirports();
   let svg = '';
-  const now = Date.now();
-  for (const p of current) {
-    const f = predictPosition(p, now);
+  for (const f of visible) {
     if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
     const {x, y} = projectOnRadar(f.lat, f.lon);
     if (Math.hypot(x - 200, y - 200) > 178) continue;
@@ -950,11 +973,11 @@ function attachMediaErrors() {
     });
   }
 }
-function paintCards(force = false) {
-  const keys = current.map(k).join('|');
+function paintCards(force = false, visible = visiblePredictions()) {
+  const keys = visible.map(k).join('|');
   if (!force && keys === cardKeys) {
     for (const article of el('flights').querySelectorAll('[data-flight-key]')) {
-      const f = current.find(p => k(p) === article.dataset.flightKey);
+      const f = visible.find(p => k(p) === article.dataset.flightKey);
       if (!f) continue;
       const dist = article.querySelector('[data-role="dist"]');
       const alt = article.querySelector('[data-role="alt"]');
@@ -969,29 +992,33 @@ function paintCards(force = false) {
     return;
   }
   cardKeys = keys;
-  el('flights').innerHTML = current.length
-    ? current.map(p => flightCard(merged(p))).join('')
+  el('flights').innerHTML = visible.length
+    ? visible.map(p => flightCard(merged(p))).join('')
     : `<div class="empty">Brak samolotów w promieniu ${radius.toLocaleString('pl-PL')} km.</div>`;
   attachMediaErrors();
 }
 function updateVisuals(data) {
+  // Każda odpowiedź FR24 ZASTĘPUJE poprzednią listę. Nieobecna maszyna znika.
   current = Array.isArray(data.flights) ? data.flights : [];
-  el('count').textContent = current.length + ' samolotów';
-  el('nearCount').textContent = String(data.inside_10km ?? current.filter(f => f.km <= 10).length);
-  el('allCount').textContent = String(current.length);
   el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
   const dt = new Date(data.updated);
   el('time').textContent = 'Stan: ' + (Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pl-PL') : '—');
   const received = Date.parse(data.updated || '');
   positionsReceivedMs = Number.isFinite(received) ? received : Date.now();
-  el('refreshInfo').textContent = `FR24 co ${activeMs / 1000} s · ruch ikon co 1 s (szacowany)`;
-  el('refreshInfo').className = current.length ? 'speed fast' : 'speed';
-  radarPoints();
-  paintCards();
+  const visible = visiblePredictions();
+  el('refreshInfo').textContent = `FR24 co ${(visible.length ? activeMs : idleMs)/1000} s · animacja co 1 s (szacowana)`;
+  el('refreshInfo').className = visible.length ? 'speed fast' : 'speed';
+  updateVisibleCounts(visible);
+  radarPoints(visible);
+  paintCards(false, visible);
+}
+function pollingInterval() {
+  return visiblePredictions().length ? activeMs : idleMs;
 }
 function schedule(ms) {
   clearTimeout(timer);
-  if (canPoll()) timer = setTimeout(pollPositions, ms);
+  timer = null;
+  if (canPoll()) timer = setTimeout(pollPositions, Math.max(0,ms));
 }
 function apiUrl(mode) {
   const params = new URLSearchParams({
@@ -1130,6 +1157,7 @@ function showPowerState() {
 function stopFetching() {
   requestEpoch++;
   clearTimeout(timer);timer=null;
+  restartAfterFlight = false;
   if(positionAbort) positionAbort.abort();
   if(detailAbort) detailAbort.abort();
   current=[];meta.clear();cardKeys='';positionsReceivedMs=0;
@@ -1146,49 +1174,61 @@ el('radarPower').addEventListener('click',()=>{
   powerOn=!powerOn;
   try{localStorage.setItem(POWER_KEY,powerOn?'on':'off')}catch{}
   if(!powerOn || nightNow()) stopFetching();
-  else {showPowerState();void pollPositions();}
+  else {showPowerState();if(positionInFlight)restartAfterFlight=true;void pollPositions();}
 });
 window.addEventListener('storage',(e)=>{
   if(e.key!==POWER_KEY)return;
   const next=e.newValue!=='off';if(next===powerOn)return;
-  powerOn=next;if(!powerOn || nightNow())stopFetching();else {showPowerState();void pollPositions();}
+  powerOn=next;if(!powerOn || nightNow())stopFetching();else {showPowerState();if(positionInFlight)restartAfterFlight=true;void pollPositions();}
 });
 // Użycie FR24 raportowane za ostatnie 30 dni. To NIE jest dokładne
 // saldo okresu abonamentowego; saldo pokazuje portal FR24.
 let lastUsageCheck=0;
+let usageInFlight=false;
 async function refreshCredits(force=false) {
   if (!canPoll())return; // wyłączenie oznacza zero zapytań, także Usage
-  if(!force && Date.now()-lastUsageCheck<10*60*1000)return;
+  if(usageInFlight || (!force && Date.now()-lastUsageCheck<10*60*1000))return;
   lastUsageCheck=Date.now();
+  usageInFlight=true;
   try {
     const res=await fetch('/api/fr24-usage',{cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const j=await res.json();
     if(!Number.isFinite(j.credits_30d))throw new Error('brak danych');
     el('creditsUsed').textContent=`Kredyty 30 dni: ${j.credits_30d.toLocaleString('pl-PL')}`;
-    el('creditsLeft').textContent='Z FR24 · wszystkie zapytania';
+    const fetchedAt = Date.parse(j.updated || '');
+    const time = Number.isFinite(fetchedAt)
+      ? new Date(fetchedAt).toLocaleTimeString('pl-PL',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit'}) : '—';
+    el('creditsLeft').textContent = `Sprawdzono: ${time}`;
+    el('creditsLeft').title = `Raport z ostatnich 30 dni; odczyt ${time} czasu polskiego. To nie saldo bieżącego abonamentu.`;
     el('creditsUsed').title='Zużycie z ostatnich 30 dni na koncie, nie saldo aktualnego okresu';
-  } catch {el('creditsUsed').textContent='Kredyty: sprawdź portal FR24';}
+  } catch {
+    if(el('creditsUsed').textContent==='Kredyty: —') el('creditsUsed').textContent='Kredyty: sprawdź portal FR24';
+  } finally {usageInFlight=false;}
 }
 el('creditsCheck').addEventListener('click',()=>void refreshCredits(true));
 async function pollPositions() {
   clearTimeout(timer);
   if (!canPoll()) {showPowerState();return;}
+  // Przy już trwającym zapytaniu nie wykonuj drugiego płatnego odczytu.
+  // Zmiana środka lub ponowne włączenie ustawi restartAfterFlight.
+  if (positionInFlight) return;
   const epoch = requestEpoch;
   const serial = ++pollSerial;
-  if (positionAbort) positionAbort.abort();
-  positionAbort = new AbortController();
-  let next = activeMs;
+  const controller = new AbortController();
+  positionAbort = controller;
+  positionInFlight = true;
+  let next = idleMs;
   el('status').textContent = 'Aktualizacja…';
   try {
     const res = await fetch(apiUrl('positions'),
-      { cache:'no-store', signal:positionAbort.signal });
+      { cache:'no-store', signal:controller.signal });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
     if (epoch !== requestEpoch || serial !== pollSerial || !canPoll()) return;
     if(data.paused){stopFetching();return;}
     updateVisuals(data);
-    next = activeMs;
+    next = pollingInterval();
     el('status').textContent = `● Radar działa · ${data.source || 'FR24'}`;
     el('status').className = 'pill';
     void enrichIfNeeded(epoch);
@@ -1202,33 +1242,44 @@ async function pollPositions() {
     el('refreshInfo').textContent = 'FR24: ponowna próba za 60 s';
     el('refreshInfo').className = 'speed';
     // Spowolnij próby po błędach lub limitach API.
-    next = 60000;
+    next = Math.max(idleMs,60000);
     if (!current.length) el('flights').innerHTML = `<div class="empty">Błąd pobierania danych: ${escapeHtml(error.message)}</div>`;
   } finally {
-    if (epoch === requestEpoch && serial === pollSerial && canPoll()) schedule(next);
+    positionInFlight = false;
+    if(positionAbort === controller) positionAbort = null;
+    if(!canPoll()){restartAfterFlight=false;return;}
+    if(restartAfterFlight){
+      restartAfterFlight=false;
+      schedule(0); // wymuszony nowy środek / powrót po przerwaniu
+    } else if(epoch === requestEpoch && serial === pollSerial) schedule(next);
   }
 }
-function applySettings(newRadius, newCenter, newMs) {
-  const changedArea = radius !== newRadius || center.lat !== newCenter.lat || center.lon !== newCenter.lon;
+function applySettings(newRadius, newCenter, newActiveMs, newIdleMs) {
+  const changedArea = radius !== newRadius || Math.abs(center.lat-newCenter.lat)>1e-7 || Math.abs(center.lon-newCenter.lon)>1e-7;
   radius = newRadius;
   center = newCenter;
-  activeMs = newMs;
+  activeMs = newActiveMs;
+  idleMs = newIdleMs;
   el('settingsError').textContent = '';
   el('radiusInput').value = String(radius);
   el('latitudeInput').value = formatCoord(center.lat);
   el('longitudeInput').value = formatCoord(center.lon);
   el('activeIntervalInput').value = String(activeMs / 1000);
+  el('idleIntervalInput').value = String(idleMs / 1000);
   renderCenter();
   try {
     localStorage.setItem('radar-zaborow-radius', String(radius));
     localStorage.setItem('radar-zaborow-lat', String(center.lat));
     localStorage.setItem('radar-zaborow-lon', String(center.lon));
-    localStorage.setItem('radar-zaborow-fr24-interval-seconds', String(activeMs / 1000));
+    localStorage.setItem('radar-zaborow-fr24-active-seconds-v20_2', String(activeMs / 1000));
+    localStorage.setItem('radar-zaborow-fr24-idle-seconds-v20_2', String(idleMs / 1000));
   } catch {}
   if (!changedArea) {
-    el('refreshInfo').textContent = current.length
-      ? `FR24 co ${activeMs/1000} s · ruch ikon co 1 s` : `FR24 co ${activeMs/1000} s`;
-    schedule(activeMs);
+    const currentInterval = pollingInterval();
+    el('refreshInfo').textContent = `FR24 co ${currentInterval/1000} s · ruch ikon co 1 s`;
+    // Zmiana interwału nie rozpoczyna nowego płatnego zapytania, a jedynie
+    // planuje następne. Żadne dodatkowe timery nie zostają w tle.
+    if(!positionInFlight) schedule(currentInterval);
     return;
   }
   requestEpoch++;
@@ -1237,6 +1288,7 @@ function applySettings(newRadius, newCenter, newMs) {
   positionsReceivedMs = 0;
   meta.clear();
   lastDetailAttempt = 0;
+  if (positionInFlight) restartAfterFlight=true;
   if (positionAbort) positionAbort.abort();
   if (detailAbort) detailAbort.abort();
   el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego środka radaru…</div>';
@@ -1261,15 +1313,18 @@ el('settingsForm').addEventListener('submit', event => {
   const lat = parseCoord(el('latitudeInput').value, 90);
   const lon = parseCoord(el('longitudeInput').value, 180);
   const rawInterval = el('activeIntervalInput').value.trim();
+  const rawIdle = el('idleIntervalInput').value.trim();
   const interval = Number(rawInterval);
+  const idle = Number(rawIdle);
   if (!/^\d+(?:\.\d{1,2})?$/.test(rawRadius) || !goodRadius(newRadius)) {
     el('settingsError').textContent = 'Podaj promień 1–200 km (np. 12,5).';
   } else if (lat === null || lon === null) {
     el('settingsError').textContent = 'Nieprawidłowe współrzędne. Podaj stopnie dziesiętne lub stopnie, minuty i sekundy.';
-  } else if (!/^\d+$/.test(rawInterval) || !goodInterval(interval)) {
-    el('settingsError').textContent = 'FR24: pobieranie co 30–300 sekund (animacja zawsze co 1 s).';
+  } else if (!/^\d+$/.test(rawInterval) || !goodInterval(interval)
+    || !/^\d+$/.test(rawIdle) || !goodInterval(idle)) {
+    el('settingsError').textContent = 'Podaj odstępy 30–900 s; animacja zawsze działa co 1 s.';
   } else {
-    applySettings(newRadius, {lat, lon}, interval * 1000);
+    applySettings(newRadius, {lat, lon}, interval * 1000, idle * 1000);
   }
 });
 function selectCenter(c) {
@@ -1291,7 +1346,10 @@ document.addEventListener('visibilitychange', () => {
     if (positionAbort) positionAbort.abort();
     if (detailAbort) detailAbort.abort();
     } else {
-    if(canPoll())void pollPositions();else showPowerState();
+    if(canPoll()){
+      if(positionInFlight)restartAfterFlight=true;
+      void pollPositions();
+    } else showPowerState();
   }
 });
 // Zegar i predykcja pracują lokalnie; nie wywołują żadnych API.
@@ -1299,9 +1357,17 @@ updateClock();
 setInterval(() => {
   updateClock();
   updatePower();
-  if (canPoll() && current.length && positionsReceivedMs) radarPoints();
+  if (canPoll() && positionsReceivedMs && current.length) {
+    const visible = visiblePredictions();
+    updateVisibleCounts(visible);
+    radarPoints(visible);
+    paintCards(false, visible);
+  }
 }, ANIMATION_MS);
 radarPoints();
+// Nawet gdy FR24 chwilowo nie zwraca samolotów, odczyt usage ponawiamy
+// nie częściej niż co 10 minut (o ile radar jest włączony).
+setInterval(() => {if(canPoll())void refreshCredits();}, 60_000);
 if(canPoll()){void pollPositions();void refreshCredits();} else showPowerState();
 </script>
 </body>
