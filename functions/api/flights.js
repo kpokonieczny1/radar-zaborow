@@ -1,8 +1,8 @@
-// Radar Zaborów 20.0 – tylko FR24 do bieżących pozycji i tras.
+// Radar Zaborów 20.2 – FR24 adaptacyjnie 60/30 s; cache 25 s.
 // Cloudflare Pages Function. Wymagany Secret Production: FR24_API_TOKEN.
 // Kafelki, zdjęcia oraz wiek z bezpłatnych źródeł nie pobierają kredytów FR24.
 const FR24_URL = 'https://fr24api.flightradar24.com/api/live/flight-positions/full';
-const CACHE_SECONDS = 180; // ten sam odczyt współdzielony przez endpointy positions / full
+const CACHE_SECONDS = 25; // poniżej minimum 30 s; nowe pozycje przy każdym planowym odczycie
 const DEFAULT = {lat:52.2629444444, lon:20.6860833333};
 const RESPONSE_HEADERS = {'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const AIRLINES = {LOT:['LOT Polish Airlines','LO'],RYR:['Ryanair','FR'],WZZ:['Wizz Air','W6'],DLH:['Lufthansa','LH'],BAW:['British Airways','BA'],KLM:['KLM','KL'],AFR:['Air France','AF'],SAS:['Scandinavian Airlines','SK'],ENT:['Enter Air','E4'],EZY:['easyJet','U2'],UAE:['Emirates','EK'],THY:['Turkish Airlines','TK']};
@@ -70,7 +70,7 @@ function normalize(row,center){
 // Warto ochronić publiczną stronę Cloudflare Access.
 async function loadPositions(ctx,area){
   const cacheKey=`v20:${area.lat.toFixed(4)}:${area.lon.toFixed(4)}:${area.radius.toFixed(1)}`;
-  const cacheRequest=new Request(new URL('/__fr24_snapshot_v20/'+encodeURIComponent(cacheKey),ctx.request.url));
+  const cacheRequest=new Request(new URL('/__fr24_snapshot_v20_2/'+encodeURIComponent(cacheKey),ctx.request.url));
   let cache=null;
   try {if(typeof caches!=='undefined')cache=caches.default;}catch{}
   if(cache){try {const existing=await cache.match(cacheRequest);if(existing)return {...await existing.json(),cache_hit:true};}catch{}}
