@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1525">
-  <title>Radar Zaborów 18.1 · regulowany podkład OSM</title>
+  <title>Radar Zaborów 20.0 · FR24 + oszczędzanie kredytów</title>
   <style>
     :root {font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#eef5ff;background:#0b1525;color-scheme:dark}
     *{box-sizing:border-box}
@@ -308,8 +308,7 @@
       .radarLegend {font-size:9px;gap:4px}
     }
 
-    /* 18.1: interaktywny, regulowany podkład OSM. Stopień przyciemnienia
-       jest ustawiany na elemencie SVG, bez ruszania symboli i okręgów. */
+    /* Podkład OSM 18.1: włącz/wyłącz i reguluj przyciemnienie. */
     .radar .osmTiles {opacity:1;filter:grayscale(.38) saturate(.72) brightness(.95);pointer-events:none}
     .radar .mapShade {fill:#071625;fill-opacity:.25;pointer-events:none}
     .settingField.mapToggle {min-width:120px;justify-content:center}
@@ -320,9 +319,36 @@
     #mapDimValue {font-variant-numeric:tabular-nums;color:#e3f4ff}
     #mapDimInput {width:100%;height:25px;margin:0;accent-color:#7cc3ff;cursor:pointer}
     #mapDimInput:disabled {opacity:.4;cursor:not-allowed}
+    /* Zegar / data w wolnym miejscu górnego paska. */
+    .radarClock {display:flex;flex-direction:column;justify-content:center;min-width:160px;
+      padding:2px 12px 2px 3px;margin-right:auto;white-space:nowrap}
+    .radarClock time {font-size:22px;letter-spacing:.035em;line-height:1.12;font-weight:790;
+      font-variant-numeric:tabular-nums;color:#f4f9ff}
+    .radarClock .clockDate {font-size:10px;color:#b9d0e7;letter-spacing:.01em}
+    .radar .aircraftSymbol.helicopter{fill:#ffdd91;stroke:#6a481b}
+    .radar .aircraftSymbol.small{fill:#9bd9ff}
+    .radar .aircraftSymbol.glider{fill:#d2bbff}
+    .radar .aircraftSymbol.uav{fill:#ffbea5}
+    .radar .aircraftSymbol.near{fill:#65e4ac;stroke:#103f37}
+    @media(max-width:760px){.radarClock {min-width:112px;padding-right:3px}
+      .radarClock time{font-size:17px}.radarClock .clockDate{font-size:9px}}
+    @media(max-width:480px){.radarClock {min-width:100%;margin-bottom:2px}
+      .radarClock time{font-size:19px}}
+    
     .osmAttribution {font-size:9px;color:#93a9c0;text-align:right;margin-top:-2px;
       margin-bottom:4px;line-height:1.3}
     .osmAttribution a {color:#bbd3e9;text-decoration:underline;text-underline-offset:2px}
+
+    /* Radar 20.0: mały przełącznik pracy i licznik. */
+    .powerButton{background:#184737;border:1px solid #3a9668;white-space:nowrap;min-height:33px;padding:6px 9px}
+    .powerButton.off{background:#69402e;border-color:#af795a}
+    .creditsMini{display:flex;align-items:center;gap:7px;background:#0c1d31;border:1px solid #36506b;border-radius:8px;padding:4px 6px;min-height:32px}
+    .creditsMini strong{font-size:11px;white-space:nowrap}
+    .creditsMini small{font-size:9px;color:#b7cce0;max-width:155px}
+    .creditsMini button{padding:1px 6px;min-height:24px;font-size:12px}
+    .header{margin-bottom:5px}.controls{margin-bottom:8px}
+    @media(max-width:720px){.creditsMini small{display:none}.creditsMini strong{font-size:10px}}
+    .pauseNotice{padding:32px 12px;text-align:center;color:#bcd1e5;font-size:14px}
   </style>
 </head>
 <body>
@@ -336,19 +362,22 @@
 
   <nav class="controls" aria-label="Ustawienia radaru">
     <div class="quickBar">
+      <div class="radarClock" aria-label="Aktualna data i czas w Polsce">
+        <time id="clockTime">--:--:--</time><span class="clockDate" id="clockDate">—</span>
+      </div>
+      <button type="button" id="radarPower" class="powerButton" aria-pressed="true">⏸ Wyłącz radar</button>
+      <div class="creditsMini" aria-label="Kredyty Flightradar24">
+        <strong id="creditsUsed">Kredyty: —</strong>
+        <small id="creditsLeft">FR24 · ostatnie 30 dni</small>
+        <button type="button" id="creditsCheck" class="secondaryButton" title="Pobierz bieżący raport zużycia FR24">↻</button>
+      </div>
       <span class="quickBarName">Środek:</span>
       <button type="button" class="centerChoice" id="restoreCenter">Zaborów</button>
       <button type="button" class="centerChoice" id="centerApartment">Mieszkanie</button>
       <button type="button" class="centerChoice" id="centerWork">Praca</button>
-      <span class="quickSummary" id="quickSummary">Promień 10 km · co 3 s przy ruchu</span>
+      <span class="quickSummary" id="quickSummary">Promień 10 km · ruch 1 s · odczyt FR24 co 180 s</span>
       <button type="button" id="settingsToggle" aria-controls="settingsForm" aria-expanded="false">⚙ Ustawienia</button>
-      <details class="fr24Disclosure" id="fr24Config">
-        <summary>Trasy FR24 <span class="fr24Chip" id="fr24Chip">Wyłączone</span></summary>
-        <div class="fr24Inline">
-          <button type="button" id="fr24Toggle" class="secondaryButton">Włącz trasy FR24</button>
-          <span id="fr24Info" class="fr24Info" role="status">Trasy FR24 wyłączone</span>
-        </div>
-      </details>
+      <div hidden id="fr24Config"><span id="fr24Chip"></span><span id="fr24Info"></span><button type="button" id="fr24Toggle">FR24</button></div>
     </div>
     <form class="settingsForm" id="settingsForm" novalidate hidden>
       <div class="settingField radius">
@@ -364,8 +393,8 @@
         <input class="settingInput" id="longitudeInput" type="text" inputmode="decimal" autocomplete="off" value="20.68608333" aria-describedby="coordsHint">
       </div>
       <div class="settingField interval">
-        <label for="activeIntervalInput">Odświeżanie (s)</label>
-        <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="3" max="300" step="1" value="3">
+        <label for="activeIntervalInput">Odczyt FR24 (s)</label>
+        <input class="settingInput" id="activeIntervalInput" type="number" inputmode="numeric" min="120" max="900" step="30" value="180">
       </div>
       <div class="settingField mapToggle">
         <label class="mapCheckbox" for="mapEnabledInput"><input id="mapEnabledInput" type="checkbox" checked> Podkład OSM</label>
@@ -378,7 +407,7 @@
       <span id="settingsError" class="settingsError" role="alert" aria-live="polite"></span>
       <div class="settingsStatus">
         <span id="coordsHint" class="hint">Współrzędne dziesiętne lub stopnie/minuty/sekundy (np. 52 15 46,6).</span>
-        <span class="speed" id="refreshInfo">Co 30 s · brak samolotów</span>
+        <span class="speed" id="refreshInfo">FR24 co 180 s · animacja co 1 s</span>
       </div>
     </form>
   </nav>
@@ -406,7 +435,7 @@
         <g id="dots"></g>
       </svg>
       <div class="osmAttribution" id="mapAttribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></div>
-      <div class="radarLegend"><span>◆ Okęcie i Babice · ✈ kierunek lotu</span><span>ⓘ Znak ? – brak danych o kierunku</span></div>
+      <div class="radarLegend"><span>◆ Lotniska · ✈ samolot · 🚁 śmigłowiec · ◇ szybowiec</span><span>Pozycje między odczytami FR24 są szacowane</span></div>
       <div class="stats" id="radarStats">
         <div class="stat"><strong id="nearCount">—</strong><span>W promieniu 10 km</span></div>
         <div class="stat"><strong id="allCount">—</strong><span>W wybranym zasięgu</span></div>
@@ -415,19 +444,17 @@
     </section>
     <section class="panel" aria-label="Lista lotów">
       <div class="sectionHead"><h2 id="listTitle">Aktualne loty</h2><button type="button" id="refresh">Odśwież</button></div>
-      <div id="flights" aria-live="polite"><div class="empty">Pobieranie danych…</div></div>
+      <div id="flights" aria-live="polite"><div class="empty">Oczekiwanie na FR24…</div></div>
     </section>
   </main>
   </div>
 
   <footer class="foot">
-    Wiek: orientacyjnie na podstawie roku produkcji konkretnego samolotu (jeśli dane są dostępne).
-    Pozycje: ADSB One, ADSB.lol i ADSB.fi. Modele, trasy i fotografie: ADSBdb,
-    ADSB.lol, Planespotters.net, airport-data.com; wybrane zdjęcie JetPhotos.
-    Nazwy i kody krajów lotnisk: OurAirports i AirportMiles (dane otwarte), uzupełniająco baza lokalna.
-    Trasy z FR24 po aktywacji dotyczą bieżących rejsów; bez FR24 dane o trasach są orientacyjne.
-    Zapytania FR24 są dodatkowo chronione prywatnym kodem dostępu; kod nie jest zapisany w HTML ani GitHubie.
-    Przy wygaszonym ekranie tablet może wstrzymywać odświeżanie.
+    Pozycje i trasy: Flightradar24 API. Ruch ikon pomiędzy odczytami jest szacowany.
+    Zdjęcia i informacje o wieku (jeśli dostępne): niezależne bezpłatne źródła.
+    Podkład © OpenStreetMap contributors. Kredyty: raport FR24 z ostatnich 30 dni, nie jest to saldo okresu rozliczeniowego.
+    W godzinach 00:00–06:00 (czas Polski) serwer odmawia wykonywania zapytań FR24.
+    Wyłączenie na tablecie zatrzymuje odświeżanie w tym urządzeniu; dla pełnej ochrony prywatnego API zabezpiecz stronę przez Cloudflare Access.
   </footer>
 
 <script>
@@ -444,15 +471,25 @@ function centerLabel(c) {
     Math.abs(c.lon - CENTERS[name].lon) < 0.0000001) || 'Własny środek';
 }
 const DEG = Math.PI / 180;
-const IDLE_MS = 30000;
+const IDLE_MS = 300000;
+const ANIMATION_MS = 1000;
+const MAX_PREDICTION_MS = 240000;
 const METADATA_MS = 90000;      // zdjęcia i trasy najwyżej raz na 90 s
 const NEW_PLANE_METADATA_MS = 15000;
 const el = id => document.getElementById(id);
+const clockTimeFormat = new Intl.DateTimeFormat('pl-PL', {timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const clockDateFormat = new Intl.DateTimeFormat('pl-PL', {timeZone:'Europe/Warsaw',weekday:'long',day:'numeric',month:'long',year:'numeric'});
+function updateClock() {
+  const now = new Date();
+  el('clockTime').textContent = clockTimeFormat.format(now);
+  el('clockDate').textContent = clockDateFormat.format(now);
+}
+
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const textOrDash = value => value == null || value === '' ? 'Brak danych' : String(value);
 const goodRadius = n => Number.isFinite(n) && n >= 1 && n <= 200;
-const goodInterval = n => Number.isInteger(n) && n >= 3 && n <= 300;
+const goodInterval = n => Number.isInteger(n) && n >= 120 && n <= 900;
 const formatCoord = n => n.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 // Współrzędne: 52.26294444 lub 52 15 46,6; opcjonalnie N/S/E/W.
 function parseCoord(value, limit) {
@@ -512,7 +549,7 @@ function routeAirportHTML(airport, direction) {
     <div class="routeAirportName">${escapeHtml(details.name || 'Nazwa lotniska nieznana')}</div></div>`;
 }
 function routeHTML(f) {
-  if (!f.from?.code && !f.to?.code) return `<div class="routeUnavailable">${fr24Active ? 'FR24: trwa wyszukiwanie lub brak danych o trasie' : 'Trasa nieustalona'}</div>`;
+  if (!f.from?.code && !f.to?.code) return `<div class="routeUnavailable">${'FR24: brak danych o trasie'}</div>`;
   return `<div class="routeStrip" aria-label="Trasa lotu${!f.to?.code ? ' – cel nieznany' : ''}">
     ${routeAirportHTML(f.from, 'origin')}
     <span class="routeArrow" aria-hidden="true">➜</span>
@@ -598,12 +635,12 @@ function flightCard(f) {
 
 let radius = 10;
 let center = { ...DEFAULT_CENTER };
-let activeMs = 3000;
+let activeMs = 180000;
 try {
   const savedRadius = Number(localStorage.getItem('radar-zaborow-radius'));
   const savedLat = Number(localStorage.getItem('radar-zaborow-lat'));
   const savedLon = Number(localStorage.getItem('radar-zaborow-lon'));
-  const savedInterval = Number(localStorage.getItem('radar-zaborow-active-seconds'));
+  const savedInterval = Number(localStorage.getItem('radar-zaborow-fr24-interval-seconds'));
   if (goodRadius(savedRadius)) radius = savedRadius;
   if (localStorage.getItem('radar-zaborow-lat') !== null && localStorage.getItem('radar-zaborow-lon') !== null
     && Number.isFinite(savedLat) && Number.isFinite(savedLon)
@@ -621,7 +658,7 @@ function renderCenter() {
     el(id).classList.toggle('isCurrent', selected);
     el(id).setAttribute('aria-pressed', String(selected));
   }
-  el('quickSummary').textContent = `Promień ${radius.toLocaleString('pl-PL')} km · ${activeMs / 1000} s przy ruchu`;
+  el('quickSummary').textContent = `Promień ${radius.toLocaleString('pl-PL')} km · ruch 1 s · dane ${activeMs / 1000} s`;
   const display = `${formatCoord(center.lat)}°, ${formatCoord(center.lon)}°`;
   el('centerSubtitle').textContent = `Samoloty · ${label} · ${display}`;
   el('radarCenterName').textContent = label === 'Własny środek' ? 'Środek' : label;
@@ -642,6 +679,7 @@ try {
 } catch { /* brak pamięci przeglądarki */ }
 let ageBusy = false;
 let current = [];
+let positionsReceivedMs = 0;
 let meta = new Map();
 let timer = null;
 let positionAbort = null;
@@ -651,16 +689,6 @@ let lastDetailAttempt = 0;
 let requestEpoch = 0;
 let pollSerial = 0;
 let cardKeys = '';
-// Trasy FR24 nie są odpytywane podczas pobierania pozycji (3 s).
-// Kod dostępu istnieje wyłącznie w pamięci tej karty przeglądarki.
-// PIN nigdy nie jest w HTML. Sesyjne przechowanie pozwala uniknąć
-// ponownego pytania podczas przeładowania strony w tej samej karcie.
-let fr24Pin = '';
-try { fr24Pin = sessionStorage.getItem('radar-fr24-session-pin') || ''; } catch {}
-let fr24Active = Boolean(fr24Pin);
-let fr24Busy = false;
-let fr24Abort = null;
-let fr24Routes = new Map();
 const airportDirectory = new Map([
   ['QPB', {name:'Warszawa-Babice', country_iso3:'POL'}],
   ['EPBC', {name:'Warszawa-Babice', country_iso3:'POL'}],
@@ -685,51 +713,25 @@ function airportLookup(airport) {
     country_iso3:airport?.country_iso3 || found?.country_iso3 || null,
   };
 }
-let fr24Attempts = new Map();
-const FR24_SUCCESS_MS = 30 * 60 * 1000;
-const FR24_MISS_MS = 5 * 60 * 1000;
-let fr24LastBatch = 0;
-const FR24_BATCH_INTERVAL_MS = 15000;
-
 function merged(plane) {
-  const base = {
-    ...plane, ...(meta.get(k(plane)) || {}),
-    lat:plane.lat, lon:plane.lon, km:plane.km,
-    altitude_m:plane.altitude_m, speed_kmh:plane.speed_kmh, track:plane.track,
-  };
-  // FR24 zmienia TYLKO dane trasy i numer rejsu — nie dotyka zdjęć,
-  // modeli, wysokości, logo, prędkości ani pozycji ADS-B.
-  if (!fr24Active) return base;
-  const route = fr24Routes.get(`${k(plane)}|${String(plane.flight || '').toUpperCase()}`);
-  // W trybie FR24 nie pokazujemy starej, potencjalnie błędnej trasy z baz ADS-B.
-  return route ? {...base, ...route} : {
-    ...base, from: null, to: null, route_source: null,
-    route_status: 'FR24: oczekiwanie na trasę lub brak dopasowania',
-    flight_number: null,
-  };
+  const other = meta.get(k(plane)) || {};
+  return {...plane,...other,
+    lat:plane.lat,lon:plane.lon,km:plane.km,
+    track:plane.track,speed_kmh:plane.speed_kmh,altitude_m:plane.altitude_m,
+    from:plane.from,to:plane.to,flight_number:plane.flight_number,
+    route_source:'Flightradar24 API'};
 }
-const LOCAL_AIRPORTS = Object.freeze([
-  {name:'Okęcie', iata:'WAW', icao:'EPWA', lat:52.1658333333, lon:20.9672222222},
-  {name:'Babice', iata:'QPB', icao:'EPBC', lat:52.2691666667, lon:20.9072222222},
-]);
-
-// Kafelki OSM i znaczniki korzystają z tej samej projekcji EPSG:3857.
-// Dzięki temu zmiana środka i promienia nie rozjeżdża ikon z drogami.
-// Ustawienia mapy są niezależne od zasięgu i odświeżania pozycji.
-// 0% = brak ciemnego filtra; 85% = mocno przyciemniona mapa.
+// Przełącznik podkładu zachowuje ustawienia 18.1.
 const MAP_VISIBLE_KEY = 'radar-zaborow-map-enabled';
 const MAP_DIM_KEY = 'radar-zaborow-map-dimming';
 let mapEnabled = true;
 let mapDimming = 25;
 try {
   mapEnabled = localStorage.getItem(MAP_VISIBLE_KEY) !== 'false';
-  const storedDimming = localStorage.getItem(MAP_DIM_KEY);
-  if (storedDimming !== null) {
-    const parsed = Number(storedDimming);
-    if (Number.isFinite(parsed)) mapDimming = Math.max(0, Math.min(85, Math.round(parsed / 5) * 5));
-  }
-} catch { /* tryb prywatny / brak miejsca w pamięci: wartości domyślne */ }
-
+  const parsed = Number(localStorage.getItem(MAP_DIM_KEY));
+  if (localStorage.getItem(MAP_DIM_KEY) !== null && Number.isFinite(parsed))
+    mapDimming = Math.max(0, Math.min(85, Math.round(parsed / 5) * 5));
+} catch {}
 function renderMapSettings() {
   el('mapEnabledInput').checked = mapEnabled;
   el('mapDimInput').value = String(mapDimming);
@@ -742,23 +744,28 @@ function renderMapSettings() {
 }
 function persistMapSettings() {
   try {
-    localStorage.setItem(MAP_VISIBLE_KEY, String(mapEnabled));
-    localStorage.setItem(MAP_DIM_KEY, String(mapDimming));
-  } catch { /* zapis nie jest wymagany do działania */ }
+    localStorage.setItem(MAP_VISIBLE_KEY,String(mapEnabled));
+    localStorage.setItem(MAP_DIM_KEY,String(mapDimming));
+  } catch {}
 }
 renderMapSettings();
 el('mapEnabledInput').addEventListener('change', event => {
   mapEnabled = event.target.checked;
-  renderMapSettings();
-  persistMapSettings();
+  renderMapSettings(); persistMapSettings();
   if (mapEnabled) drawMapTiles();
 });
 el('mapDimInput').addEventListener('input', event => {
   mapDimming = Number(event.target.value);
-  renderMapSettings();
-  persistMapSettings();
+  renderMapSettings(); persistMapSettings();
 });
 
+const LOCAL_AIRPORTS = Object.freeze([
+  {name:'Okęcie', iata:'WAW', icao:'EPWA', lat:52.1658333333, lon:20.9672222222},
+  {name:'Babice', iata:'QPB', icao:'EPBC', lat:52.2691666667, lon:20.9072222222},
+]);
+
+// Kafelki OSM i znaczniki korzystają z tej samej projekcji EPSG:3857.
+// Dzięki temu zmiana środka i promienia nie rozjeżdża ikon z drogami.
 const TILE_URL = 'https://tile.openstreetmap.org';
 const MERCATOR_LAT_MAX = 85.05112878;
 let cachedMap = null;
@@ -796,7 +803,7 @@ function projectOnRadar(lat, lon) {
   return {x:200 + dx * g.scale, y:200 + (p.y - g.cp.y) * g.scale};
 }
 function drawMapTiles() {
-  if (!mapEnabled) return; // bez pobierania kafelków, gdy podkład wyłączono
+  if (!mapEnabled) return;
   const g = radarMapGeometry();
   const layer = el('mapTiles');
   if (layer.dataset.key === g.key) return; // brak przeładowania kafelków co 3 s
@@ -846,35 +853,75 @@ function radarAirports() {
   }).join('');
   el('airports').innerHTML = airportSvg;
 }
+// Wizualizacja nie tworzy nowych pomiarów. Przesuwamy wyłącznie znane
+// samoloty z ostatniej odpowiedzi i zatrzymujemy przewidywanie po 40 s.
+function predictPosition(f, now = Date.now()) {
+  if (!positionsReceivedMs || !Number.isFinite(f.lat) || !Number.isFinite(f.lon)) return f;
+  const secs = Math.max(0, Math.min(MAX_PREDICTION_MS/1000, (now-positionsReceivedMs)/1000));
+  if (!Number.isFinite(f.track) || !Number.isFinite(f.speed_kmh) || f.speed_kmh <= 0 || secs <= 0) return f;
+  const km = f.speed_kmh * secs / 3600;
+  const rad = f.track * DEG;
+  const lat = Math.max(-89.99, Math.min(89.99, f.lat + km * Math.cos(rad) / 111.32));
+  const cosLat = Math.max(0.03, Math.cos(f.lat*DEG));
+  let lon = f.lon + km * Math.sin(rad) / (111.32*cosLat);
+  if (lon > 180) lon -= 360;
+  if (lon < -180) lon += 360;
+  return {...f,lat,lon,km:Math.round(distanceKm(center.lat,center.lon,lat,lon)*10)/10};
+}
+function distanceKm(lat1,lon1,lat2,lon2) {
+  const p1=lat1*DEG,p2=lat2*DEG,dlat=(lat2-lat1)*DEG,dlon=(lon2-lon1)*DEG;
+  const a=Math.sin(dlat/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dlon/2)**2;
+  return 12742*Math.asin(Math.min(1,Math.sqrt(a)));
+}
+// Kategorie emiterów FR24: 2 mały, 8 wiropłat, 9 szybowiec, 12 ultralekki, 14 UAV.
+function aircraftKind(f) {
+  if (typeof f.kind === 'string' && f.kind) return f.kind;
+  const type = String(meta.get(k(f))?.model || f.model || '').toUpperCase();
+  if (/^(R44|R66|H125|H145|EC[123]|AS3|B06|HELI|MI8|UH60|S76)/.test(type)) return 'helicopter';
+  if (/^(C1[567]|C2[01]|C3[0-9]|PA[1-4]|DA[24]|P28|SR2|P68)/.test(type)) return 'small';
+  if (/^(SZD|DG[0-9]|ASW|ASK|JS[123]|GLID)/.test(type)) return 'glider';
+  return 'airliner';
+}
+const SHAPES = Object.freeze({
+  airliner:'M0 -15 C2 -15 3 -12 3 -8 L3 -5 L12 0 L12 3 L3 1.5 L3 9 L7 12 L7 14 L0 12 L-7 14 L-7 12 L-3 9 L-3 1.5 L-12 3 L-12 0 L-3 -5 L-3 -8 C-3 -12 -2 -15 0 -15 Z',
+  small:'M0 -12 Q2 -11 2 -7 L2 -2 L11 1 L11 3 L2 3 L2 9 L5 11 L5 13 L0 11 L-5 13 L-5 11 L-2 9 L-2 3 L-11 3 L-11 1 L-2 -2 L-2 -7 Q-2 -11 0 -12 Z',
+  glider:'M0 -13 L1.3 -7 L1.3 -2 L15 -1 L15 1 L1.3 2 L1.3 10 L4 11 L4 12 L0 11 L-4 12 L-4 11 L-1.3 10 L-1.3 2 L-15 1 L-15 -1 L-1.3 -2 L-1.3 -7 Z',
+  helicopter:'M0 -10 C5 -10 6 -5 6 0 C6 5 3 6 2 7 L2 13 L-2 13 L-2 7 C-3 6 -6 5 -6 0 C-6 -5 -5 -10 0 -10 Z',
+  uav:'M-3 -3 L3 3 M3 -3 L-3 3 M-9 -9 A3 3 0 1 0 -8.9 -9 M9 -9 A3 3 0 1 0 9.1 -9 M-9 9 A3 3 0 1 0 -8.9 9 M9 9 A3 3 0 1 0 9.1 9',
+  balloon:'M0 -12 C-13 -12 -11 5 0 9 C11 5 13 -12 0 -12 Z M-3 11 L3 11 L2 14 L-2 14 Z',
+});
+function aircraftMarker(x,y,heading,near,kind) {
+  const cls = `aircraftSymbol ${kind} ${near?'near':''}`;
+  const shape = SHAPES[kind] || SHAPES.airliner;
+  const details = kind === 'helicopter'
+    ? '<path d="M-15 -3 L15 -3 M-8 10 L-8 13 L8 13 L8 10" fill="none" stroke="#e7f6ff" stroke-width="2" stroke-linecap="round"/>'
+    : '';
+  const mark = kind === 'uav' ? `fill="none" stroke="#a6edfa" stroke-width="2"` : '';
+  return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${heading.toFixed(1)})">
+    <path class="${cls}" d="${shape}" ${mark}/>${details}</g>`;
+}
 function radarPoints() {
   drawMapTiles();
   el('zone10').setAttribute('r', String(178 * Math.min(1, 10 / radius)));
   el('rangeLabel').textContent = radius.toLocaleString('pl-PL') + ' km';
   radarAirports();
   let svg = '';
-  for (const f of current) {
+  const now = Date.now();
+  for (const p of current) {
+    const f = predictPosition(p, now);
     if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
     const {x, y} = projectOnRadar(f.lat, f.lon);
     if (Math.hypot(x - 200, y - 200) > 178) continue;
-    const px = x.toFixed(1), py = y.toFixed(1);
     const near = f.km <= 10;
-    // W ADS-B track jest kursem względem północy, zgodnym z orientacją radaru.
-    // Brak track => nie obracamy ikony 'na północ', lecz oznaczamy kurs jako nieznany.
-    const hasHeading = typeof f.track === 'number' && Number.isFinite(f.track);
-    const heading = hasHeading ? ((f.track % 360) + 360) % 360 : null;
-    const marker = hasHeading
-      ? `<g transform="translate(${px} ${py}) rotate(${heading.toFixed(1)})">
-           <path class="aircraftSymbol ${near ? 'near' : ''}"
-             d="M0 -15 C2 -15 3 -12 3 -8 L3 -5 L12 0 L12 3 L3 1.5 L3 9 L7 12 L7 14 L0 12 L-7 14 L-7 12 L-3 9 L-3 1.5 L-12 3 L-12 0 L-3 -5 L-3 -8 C-3 -12 -2 -15 0 -15 Z"/>
-         </g>`
-      : `<g transform="translate(${px} ${py})">
-           <circle class="headingUnknown ${near ? 'near' : ''}" r="8"/>
-           <text class="unknownMark" y="3.5">?</text>
-         </g>`;
+    const heading = typeof f.track === 'number' && Number.isFinite(f.track)
+      ? ((f.track % 360) + 360) % 360 : null;
+    const kind = aircraftKind(f);
+    const marker = heading === null ? `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
+       <circle class="headingUnknown ${near?'near':''}" r="9"/><text class="unknownMark" y="3.5">?</text></g>`
+      : aircraftMarker(x,y,heading,near,kind);
     const identity = f.flight || f.registration || f.hex || 'Statek powietrzny';
-    svg += `<g><title>${escapeHtml(identity)} · ${f.km} km · ${heading === null ? 'kurs nieznany' : `kurs ${Math.round(heading)}°`}</title>
-      ${marker}
-      <text class="planeLabel" x="${(x+14).toFixed(1)}" y="${(y-10).toFixed(1)}">${escapeHtml(f.flight || f.registration || '')}</text></g>`;
+    svg += `<g><title>${escapeHtml(identity)} · ${f.km} km · ${heading === null ? 'kurs nieznany' : `kurs ${Math.round(heading)}°`} · pozycja szacowana</title>
+      ${marker}<text class="planeLabel" x="${(x+14).toFixed(1)}" y="${(y-10).toFixed(1)}">${escapeHtml(f.flight || f.registration || '')}</text></g>`;
   }
   el('dots').innerHTML = svg;
 }
@@ -935,16 +982,16 @@ function updateVisuals(data) {
   el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
   const dt = new Date(data.updated);
   el('time').textContent = 'Stan: ' + (Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pl-PL') : '—');
-  const fast = current.length > 0;
-  el('refreshInfo').textContent = fast
-    ? `Co ${activeMs / 1000} s · wykryto samolot` : 'Co 30 s · brak samolotów';
-  el('refreshInfo').className = fast ? 'speed fast' : 'speed';
+  const received = Date.parse(data.updated || '');
+  positionsReceivedMs = Number.isFinite(received) ? received : Date.now();
+  el('refreshInfo').textContent = `FR24 co ${activeMs / 1000} s · ruch ikon co 1 s (szacowany)`;
+  el('refreshInfo').className = current.length ? 'speed fast' : 'speed';
   radarPoints();
   paintCards();
 }
 function schedule(ms) {
   clearTimeout(timer);
-  if (!document.hidden) timer = setTimeout(pollPositions, ms);
+  if (canPoll()) timer = setTimeout(pollPositions, ms);
 }
 function apiUrl(mode) {
   const params = new URLSearchParams({
@@ -953,7 +1000,7 @@ function apiUrl(mode) {
   return `/api/flights?${params}`;
 }
 async function enrichIfNeeded(epoch) {
-  if (!current.length || detailInFlight || document.hidden) return;
+  if (!canPoll() || !current.length || detailInFlight) return;
   const now = Date.now();
   const newPlane = current.some(f => !meta.has(k(f)));
   if (now - lastDetailAttempt < (newPlane ? NEW_PLANE_METADATA_MS : METADATA_MS)) return;
@@ -961,11 +1008,14 @@ async function enrichIfNeeded(epoch) {
   detailInFlight = true;
   detailAbort = new AbortController();
   try {
-    const response = await fetch(apiUrl('full'),
-      { cache:'no-store', signal:detailAbort.signal });
+    const response = await fetch('/api/flight-metadata', {
+      method:'POST',cache:'no-store',signal:detailAbort.signal,
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({aircraft:current.slice(0,12).map(f=>({hex:f.hex,registration:f.registration,flight:f.flight,model:f.model}))})
+    });
     if (!response.ok) return;
     const data = await response.json();
-    if (epoch !== requestEpoch) return;
+    if (epoch !== requestEpoch || !canPoll()) return;
     for (const f of data.flights || []) {
       meta.set(k(f), {
         registration:f.registration, model:f.model, year_built:f.year_built, operator:f.operator,
@@ -977,12 +1027,11 @@ async function enrichIfNeeded(epoch) {
     if (meta.size > 250) meta = new Map([...meta].slice(-150));
     paintCards(true);
     void enrichAirports();
-    void enrichRoutesIfNeeded(epoch);
   } catch { /* dane pozycyjne będą działać niezależnie od metadanych */ }
   finally { detailInFlight = false; }
 }
 async function enrichAgeIfNeeded(epoch) {
-  if (ageBusy || document.hidden) return;
+  if (!canPoll() || ageBusy) return;
   // Szybkie wyszukanie ICAO24; osobne API nie korzysta z płatnych źródeł.
   const candidates = current.filter(f => !f.year_built)
     .map(f => ({hex:String(f.hex || '').replace(/^~/,'').toUpperCase(),
@@ -1019,18 +1068,8 @@ async function enrichAgeIfNeeded(epoch) {
     }
   } finally { ageBusy = false; }
 }
-function fr24Key(f) {
-  return `${k(f)}|${String(f.flight || '').toUpperCase()}`;
-}
-function setFr24Info(message, active=false) {
-  el('fr24Info').textContent = message;
-  el('fr24Info').className = 'fr24Info' + (active ? ' active' : '');
-  // Stan widoczny nawet wtedy, gdy panel konfiguracji FR24 jest zwinięty.
-  el('fr24Chip').textContent = fr24Active ? 'Aktywne' : 'Wyłączone';
-  el('fr24Chip').classList.toggle('active', fr24Active);
-}
 async function enrichAirports() {
-  if (airportLookupBusy || document.hidden) return;
+  if (!canPoll() || airportLookupBusy) return;
   const codes = new Set();
   for (const plane of current) {
     const f = merged(plane);
@@ -1066,125 +1105,107 @@ async function enrichAirports() {
   finally { airportLookupBusy = false; }
 }
 
-async function enrichRoutesIfNeeded(epoch) {
-  if (!fr24Active || fr24Busy || document.hidden) return;
-  const now = Date.now();
-  if (now - fr24LastBatch < FR24_BATCH_INTERVAL_MS) return;
-  const candidates = current.filter(f => /^[A-Z0-9]{3,10}$/.test(f.flight || '')
-    && (!fr24Attempts.has(fr24Key(f)) || now - fr24Attempts.get(fr24Key(f)).time >
-       (fr24Attempts.get(fr24Key(f)).hit ? FR24_SUCCESS_MS : FR24_MISS_MS))).slice(0,10);
-  if (!candidates.length) return;
-  fr24Busy = true;
-  fr24LastBatch = now;
-  fr24Abort = new AbortController();
-  // Zaznacz próbę przed rozpoczęciem pobierania, aby szybkie odświeżanie
-  // co 3 s nie uruchomiło drugiego zapytania równolegle.
-  for (const plane of candidates) fr24Attempts.set(fr24Key(plane), {time:now, hit:false});
-  setFr24Info('Sprawdzanie tras w FR24…', true);
+
+// Włącznik działa per przeglądarka i jest zsynchronizowany z innymi kartami
+// otwartymi na tym samym tablecie. Serwer niezależnie blokuje godziny 00–06.
+const POWER_KEY='radar-zaborow-power-v20';
+let powerOn=true;
+try {powerOn=localStorage.getItem(POWER_KEY)!=='off';} catch{}
+const polishHour = new Intl.DateTimeFormat('en-GB', {timeZone:'Europe/Warsaw', hour:'2-digit',hourCycle:'h23'});
+const nightNow = () => Number(polishHour.format(new Date())) < 6;
+const canPoll = () => powerOn && !nightNow() && !document.hidden;
+function showPowerState() {
+  const offNight=nightNow(), stopped=!powerOn || offNight;
+  const btn=el('radarPower');
+  btn.textContent=powerOn?'⏸ Wyłącz radar':'▶ Włącz radar';
+  btn.classList.toggle('off',!powerOn);
+  btn.setAttribute('aria-pressed',String(powerOn));
+  if(stopped) {
+    el('status').textContent=offNight?'🌙 Przerwa 00:00–06:00':'⏸ Radar wyłączony';
+    el('status').className='pill';
+    el('refreshInfo').textContent=offNight?'Noc: 0 zapytań FR24':'Stop: 0 zapytań FR24';
+    el('flights').innerHTML=`<div class="pauseNotice">${offNight?'Przerwa nocna: 00:00–06:00 (czas Polski)':'Radar zatrzymany ręcznie'}<br>Brak płatnych pobrań danych lotów.</div>`;
+  }
+}
+function stopFetching() {
+  requestEpoch++;
+  clearTimeout(timer);timer=null;
+  if(positionAbort) positionAbort.abort();
+  if(detailAbort) detailAbort.abort();
+  current=[];meta.clear();cardKeys='';positionsReceivedMs=0;
+  el('count').textContent='0';el('nearCount').textContent='0';el('allCount').textContent='0';
+  radarPoints();showPowerState();
+}
+let lastNight=nightNow();
+function updatePower() {
+  const isNight=nightNow();
+  if(isNight!==lastNight){lastNight=isNight;if(isNight)stopFetching();else if(powerOn)void pollPositions();}
+  if(!powerOn || isNight)showPowerState();
+}
+el('radarPower').addEventListener('click',()=>{
+  powerOn=!powerOn;
+  try{localStorage.setItem(POWER_KEY,powerOn?'on':'off')}catch{}
+  if(!powerOn || nightNow()) stopFetching();
+  else {showPowerState();void pollPositions();}
+});
+window.addEventListener('storage',(e)=>{
+  if(e.key!==POWER_KEY)return;
+  const next=e.newValue!=='off';if(next===powerOn)return;
+  powerOn=next;if(!powerOn || nightNow())stopFetching();else {showPowerState();void pollPositions();}
+});
+// Użycie FR24 raportowane za ostatnie 30 dni. To NIE jest dokładne
+// saldo okresu abonamentowego; saldo pokazuje portal FR24.
+let lastUsageCheck=0;
+async function refreshCredits(force=false) {
+  if (!canPoll())return; // wyłączenie oznacza zero zapytań, także Usage
+  if(!force && Date.now()-lastUsageCheck<10*60*1000)return;
+  lastUsageCheck=Date.now();
   try {
-    const response = await fetch('/api/fr24-routes', {
-      method:'POST', cache:'no-store', signal:fr24Abort.signal,
-      headers:{'content-type':'application/json'},
-      body:JSON.stringify({pin:fr24Pin, aircraft:candidates.map(f => ({
-        callsign:f.flight,hex:f.hex,registration:f.registration,
-      }))}),
-    });
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error || `FR24 HTTP ${response.status}`);
-    if (epoch !== requestEpoch || !fr24Active) return;
-    let found = 0;
-    for (const plane of candidates) {
-      const key = fr24Key(plane);
-      const route = json.routes?.[String(plane.flight).toUpperCase()];
-      if (route?.from?.code || route?.to?.code) {
-        fr24Routes.set(key, route);
-        fr24Attempts.set(key, {time:Date.now(), hit:true});
-        found++;
-      }
-    }
-    if (fr24Routes.size > 150) fr24Routes = new Map([...fr24Routes].slice(-100));
-    if (fr24Attempts.size > 200) fr24Attempts = new Map([...fr24Attempts].slice(-150));
-    setFr24Info(`FR24 aktywne · ${found} nowych tras · pozycje z ADS-B`, true);
-    if (found) { paintCards(true); void enrichAirports(); }
-  } catch (error) {
-    if (error.name === 'AbortError') return;
-    setFr24Info(`FR24: ${error.message}. Pozycje ADS-B nadal działają.`);
-    // Nie ponawiamy co 3 s po błędzie autoryzacji lub brakującej zgody.
-    if (/nieaktywna|Brak konfiguracji|kod dostępu|uprawnień/i.test(error.message)) {
-      fr24Active = false;
-      el('fr24Toggle').textContent = 'Włącz trasy FR24';
-      fr24Pin = '';
-      try {sessionStorage.removeItem('radar-fr24-session-pin');} catch {}
-    }
-  } finally { fr24Busy = false; fr24Abort = null; }
+    const res=await fetch('/api/fr24-usage',{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const j=await res.json();
+    if(!Number.isFinite(j.credits_30d))throw new Error('brak danych');
+    el('creditsUsed').textContent=`Kredyty 30 dni: ${j.credits_30d.toLocaleString('pl-PL')}`;
+    el('creditsLeft').textContent='Z FR24 · wszystkie zapytania';
+    el('creditsUsed').title='Zużycie z ostatnich 30 dni na koncie, nie saldo aktualnego okresu';
+  } catch {el('creditsUsed').textContent='Kredyty: sprawdź portal FR24';}
 }
-
-function toggleFR24() {
-  if (fr24Active) {
-    fr24Active = false;
-    fr24Pin = '';
-    try {sessionStorage.removeItem('radar-fr24-session-pin');} catch {}
-    el('fr24Toggle').textContent = 'Włącz trasy FR24';
-    if (fr24Abort) fr24Abort.abort();
-    fr24Routes.clear(); fr24Attempts.clear();
-    setFr24Info('FR24 wyłączone · dostępne są trasy orientacyjne z innych baz.');
-    paintCards(true);
-    void enrichAirports();
-    return;
-  }
-  const pin = window.prompt('Prywatny kod FR24 z Cloudflare (wpisujesz raz na kartę):');
-  if (pin === null) return;
-  if (pin.trim().length < 8) {
-    setFr24Info('Kod musi mieć co najmniej 8 znaków.'); return;
-  }
-  fr24Pin = pin.trim();
-  try {sessionStorage.setItem('radar-fr24-session-pin',fr24Pin);} catch {}
-  fr24Active = true;
-  paintCards(true);
-  el('fr24Toggle').textContent = 'Wyłącz trasy FR24';
-  setFr24Info('FR24: szukam tras aktualnie śledzonych samolotów…', true);
-  void enrichRoutesIfNeeded(requestEpoch);
-}
-el('fr24Toggle').addEventListener('click',toggleFR24);
-if (fr24Active) {
-  el('fr24Toggle').textContent = 'Wyłącz trasy FR24';
-  setFr24Info('Trasy FR24 aktywne · dostęp sesyjny', true);
-}
-
+el('creditsCheck').addEventListener('click',()=>void refreshCredits(true));
 async function pollPositions() {
   clearTimeout(timer);
-  if (document.hidden) return;
+  if (!canPoll()) {showPowerState();return;}
   const epoch = requestEpoch;
   const serial = ++pollSerial;
   if (positionAbort) positionAbort.abort();
   positionAbort = new AbortController();
-  let next = current.length ? activeMs : IDLE_MS;
+  let next = activeMs;
   el('status').textContent = 'Aktualizacja…';
   try {
     const res = await fetch(apiUrl('positions'),
       { cache:'no-store', signal:positionAbort.signal });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
-    if (epoch !== requestEpoch || serial !== pollSerial) return;
+    if (epoch !== requestEpoch || serial !== pollSerial || !canPoll()) return;
+    if(data.paused){stopFetching();return;}
     updateVisuals(data);
-    next = current.length ? activeMs : IDLE_MS;
-    el('status').textContent = `● Radar działa · ${data.source || 'ADS-B'}`;
+    next = activeMs;
+    el('status').textContent = `● Radar działa · ${data.source || 'FR24'}`;
     el('status').className = 'pill';
     void enrichIfNeeded(epoch);
     void enrichAgeIfNeeded(epoch);
-    void enrichRoutesIfNeeded(epoch);
+    void refreshCredits();
     void enrichAirports();
   } catch (error) {
     if (epoch !== requestEpoch || serial !== pollSerial || error.name === 'AbortError') return;
     el('status').textContent = '⚠ Brak połączenia';
     el('status').className = 'pill bad';
-    el('refreshInfo').textContent = 'Ponowna próba za 30 s';
+    el('refreshInfo').textContent = 'FR24: ponowna próba za 60 s';
     el('refreshInfo').className = 'speed';
     // Spowolnij próby po błędach lub limitach API.
-    next = IDLE_MS;
+    next = 60000;
     if (!current.length) el('flights').innerHTML = `<div class="empty">Błąd pobierania danych: ${escapeHtml(error.message)}</div>`;
   } finally {
-    if (epoch === requestEpoch && serial === pollSerial) schedule(next);
+    if (epoch === requestEpoch && serial === pollSerial && canPoll()) schedule(next);
   }
 }
 function applySettings(newRadius, newCenter, newMs) {
@@ -1202,30 +1223,29 @@ function applySettings(newRadius, newCenter, newMs) {
     localStorage.setItem('radar-zaborow-radius', String(radius));
     localStorage.setItem('radar-zaborow-lat', String(center.lat));
     localStorage.setItem('radar-zaborow-lon', String(center.lon));
-    localStorage.setItem('radar-zaborow-active-seconds', String(activeMs / 1000));
+    localStorage.setItem('radar-zaborow-fr24-interval-seconds', String(activeMs / 1000));
   } catch {}
   if (!changedArea) {
     el('refreshInfo').textContent = current.length
-      ? `Co ${activeMs / 1000} s · wykryto samolot` : 'Co 30 s · brak samolotów';
-    schedule(current.length ? activeMs : IDLE_MS);
+      ? `FR24 co ${activeMs/1000} s · ruch ikon co 1 s` : `FR24 co ${activeMs/1000} s`;
+    schedule(activeMs);
     return;
   }
   requestEpoch++;
   cardKeys = '';
   current = [];
+  positionsReceivedMs = 0;
   meta.clear();
-  fr24Routes.clear(); fr24Attempts.clear();
   lastDetailAttempt = 0;
   if (positionAbort) positionAbort.abort();
   if (detailAbort) detailAbort.abort();
-  if (fr24Abort) fr24Abort.abort();
   el('flights').innerHTML = '<div class="empty">Pobieranie danych dla nowego środka radaru…</div>';
   el('count').textContent = '—';
   el('nearCount').textContent = '—';
   el('allCount').textContent = '—';
   el('radiusInfo').textContent = `Promień: ${radius.toLocaleString('pl-PL')} km (poziomo)`;
   radarPoints();
-  void pollPositions();
+  if(canPoll())void pollPositions();else showPowerState();
 }
 el('settingsToggle').addEventListener('click', () => {
   const form = el('settingsForm');
@@ -1247,7 +1267,7 @@ el('settingsForm').addEventListener('submit', event => {
   } else if (lat === null || lon === null) {
     el('settingsError').textContent = 'Nieprawidłowe współrzędne. Podaj stopnie dziesiętne lub stopnie, minuty i sekundy.';
   } else if (!/^\d+$/.test(rawInterval) || !goodInterval(interval)) {
-    el('settingsError').textContent = 'Częstotliwość przy wykryciu samolotu: od 3 do 300 sekund (liczba całkowita).';
+    el('settingsError').textContent = 'FR24: pobieranie co 30–300 sekund (animacja zawsze co 1 s).';
   } else {
     applySettings(newRadius, {lat, lon}, interval * 1000);
   }
@@ -1261,6 +1281,7 @@ el('restoreCenter').addEventListener('click', () => selectCenter(CENTERS.Zaboró
 el('centerApartment').addEventListener('click', () => selectCenter(CENTERS.Mieszkanie));
 el('centerWork').addEventListener('click', () => selectCenter(CENTERS.Praca));
 el('refresh').addEventListener('click', () => {
+  if(!canPoll()){showPowerState();return;}
   clearTimeout(timer);
   void pollPositions();
 });
@@ -1269,13 +1290,19 @@ document.addEventListener('visibilitychange', () => {
     clearTimeout(timer);
     if (positionAbort) positionAbort.abort();
     if (detailAbort) detailAbort.abort();
-    if (fr24Abort) fr24Abort.abort();
-  } else {
-    void pollPositions();
+    } else {
+    if(canPoll())void pollPositions();else showPowerState();
   }
 });
+// Zegar i predykcja pracują lokalnie; nie wywołują żadnych API.
+updateClock();
+setInterval(() => {
+  updateClock();
+  updatePower();
+  if (canPoll() && current.length && positionsReceivedMs) radarPoints();
+}, ANIMATION_MS);
 radarPoints();
-void pollPositions();
+if(canPoll()){void pollPositions();void refreshCredits();} else showPowerState();
 </script>
 </body>
 </html>
